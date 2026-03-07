@@ -1,2 +1,2 @@
-# aidennis0297-art.github.i
+# aidennis0297-art.github.io
 app-ads.txt hosting for Note PARA
