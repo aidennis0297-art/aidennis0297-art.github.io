@@ -7,47 +7,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="icon" type="image/png" href="favicon.png">
-
-    <!-- Firebase SDK (Version 8) -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
 <body>
-    <!-- Authentication Overlay -->
-    <div id="auth-overlay" class="auth-overlay">
-        <div class="auth-card">
-            <h2 id="auth-title">로그인</h2>
-            <p id="auth-subtitle">내 아이디로 투두리스트 시작하기</p>
-            
-            <div class="auth-form">
-                <div class="input-group">
-                    <label for="auth-id"><i class="fas fa-user"></i> 아이디</label>
-                    <input type="text" id="auth-id" placeholder="영문/숫자 4자 이상" autocomplete="off">
-                </div>
-                <div class="input-group">
-                    <label for="auth-pw"><i class="fas fa-lock"></i> 비밀번호</label>
-                    <input type="password" id="auth-pw" placeholder="영문/숫자 4자 이상">
-                </div>
-                
-                <div id="auth-error-msg" class="auth-error hidden"></div>
-                
-                <button id="auth-submit-btn" class="modal-btn primary" style="width: 100%; margin-top: 10px;">로그인</button>
-            </div>
-            
-            <div class="auth-switch">
-                <span id="auth-switch-text">계정이 없으신가요?</span>
-                <button id="auth-switch-btn" class="text-btn">회원가입</button>
-            </div>
-            
-            <div id="auth-loading" class="auth-loading hidden">
-                <i class="fas fa-spinner fa-spin"></i> 연결 중...
-            </div>
-        </div>
-    </div>
-
     <div class="app-layout">
         <aside class="sidebar">
             <div class="sidebar-header">
@@ -104,10 +66,6 @@
                         <li class="nav-item" data-view="settings">
                             <i class="fas fa-cog text-gray"></i>
                             <span>설정</span>
-                        </li>
-                        <li class="nav-item" id="logout-btn">
-                            <i class="fas fa-sign-out-alt text-red"></i>
-                            <span>로그아웃</span>
                         </li>
                     </ul>
                 </div>
@@ -268,8 +226,6 @@
         </div>
     </div>
 
-    <!-- Firebase Config & Auth Logic -->
-    <script src="firebase-config.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

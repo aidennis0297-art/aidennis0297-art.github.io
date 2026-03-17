@@ -1,22 +1,31 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- FIREBASE AUTHENTICATION & DATABASE INIT ---
-    // Ensure firebase is loaded from index.html -> firebase-config.js
-    let currentUser = null;
-
     // --- STATE ---
     let state = {
-        categories: [
+        categories: JSON.parse(localStorage.getItem('categories')) || [
             { id: 'cat_school', name: '학교', color: '#ff3b30' },
             { id: 'cat_life', name: '생활', color: '#34c759' },
             { id: 'cat_project', name: '프로젝트', color: '#5856d6' }
         ],
-        tasks: [],
-        victoryLog: [],
+        tasks: JSON.parse(localStorage.getItem('tasks')) || [],
+        victoryLog: JSON.parse(localStorage.getItem('victoryLog')) || [],
         currentView: 'super-routine',
-        reward: '',
-        rewardTarget: '100',
+        reward: localStorage.getItem('reward') || '',
+        rewardTarget: localStorage.getItem('rewardTarget') || '100',
         editMode: false,
-        theme: 'light'
+        theme: localStorage.getItem('theme') || 'light'
+    };
+
+    const save = () => {
+        // Ensure all tasks have a unique order
+        let maxOrder = 0;
+        state.tasks.forEach(t => { if(t.order > maxOrder) maxOrder = t.order; });
+        state.tasks = state.tasks.map(t => ({...t, order: t.order ?? (maxOrder++)}));
+        
+        localStorage.setItem('categories', JSON.stringify(state.categories));
+        localStorage.setItem('tasks', JSON.stringify(state.tasks));
+        localStorage.setItem('victoryLog', JSON.stringify(state.victoryLog));
+        localStorage.setItem('reward', state.reward);
+        localStorage.setItem('rewardTarget', state.rewardTarget);
     };
 
     const $ = id => document.getElementById(id);
@@ -35,184 +44,27 @@ document.addEventListener('DOMContentLoaded', () => {
         rewardChip: $('reward-display-chip'), editModeBtn: $('edit-mode-btn'),
         srEditBtn: $('sr-edit-btn'), modal: $('custom-modal'),
         settingsView: $('settings-view'), resetAllBtn: $('reset-all-btn'),
-        themeToggleBtn: $('theme-toggle-btn'), logoutBtn: $('logout-btn'),
+        themeToggleBtn: $('theme-toggle-btn'),
         exportBtn: $('export-btn'), importBtn: $('import-btn'), importFile: $('import-file-input'),
-        victoryView: $('victory-log-view'), victoryList: $('victory-list'),
-        // Auth DOM
-        authOverlay: $('auth-overlay'), authId: $('auth-id'), authPw: $('auth-pw'),
-        authSubmit: $('auth-submit-btn'), authSwitchBtn: $('auth-switch-btn'),
-        authSwitchText: $('auth-switch-text'), authTitle: $('auth-title'),
-        authError: $('auth-error-msg'), authLoading: $('auth-loading')
+        victoryView: $('victory-log-view'), victoryList: $('victory-list')
     };
-
-    let isLoginMode = true;
-
-    // --- AUTH LOGIC ---
-    function setupAuth() {
-        if (!firebase) {
-            showAuthError("Firebase sdk not loaded.");
-            return;
-        }
-
-        // Toggle Login/Signup UI
-        if(el.authSwitchBtn) {
-            el.authSwitchBtn.onclick = () => {
-                isLoginMode = !isLoginMode;
-                el.authTitle.textContent = isLoginMode ? "로그인" : "회원가입";
-                el.authSubmit.textContent = isLoginMode ? "로그인" : "가입하기";
-                el.authSwitchText.textContent = isLoginMode ? "계정이 없으신가요?" : "이미 계정이 있으신가요?";
-                el.authSwitchBtn.textContent = isLoginMode ? "회원가입" : "로그인";
-                el.authError.classList.add('hidden');
-            };
-        }
-
-        // Handle Submit
-        if(el.authSubmit) {
-            el.authSubmit.onclick = async () => {
-                const id = el.authId.value.trim();
-                const pw = el.authPw.value.trim();
-                
-                // Validation: English letters & numbers only, config length >= 4
-                const validRegex = /^[a-zA-Z0-9]{4,}$/;
-                if (!validRegex.test(id)) {
-                    showAuthError("아이디는 영문/숫자 4자 이상이어야 합니다.");
-                    return;
-                }
-                if (!validRegex.test(pw)) {
-                    showAuthError("비밀번호는 영문/숫자 4자 이상이어야 합니다.");
-                    return;
-                }
-
-                el.authLoading.classList.remove('hidden');
-                
-                try {
-                    // Firebase Auth expects emails. We will fake an email for the ID:
-                    const mockEmail = `${id.toLowerCase()}@productivity.local`; 
-                    
-                    if (isLoginMode) {
-                        await auth.signInWithEmailAndPassword(mockEmail, pw);
-                    } else {
-                        // Check if exists first (firebase handles this but we want a nice message)
-                        await auth.createUserWithEmailAndPassword(mockEmail, pw);
-                        
-                        // Initialize empty data structure for new user
-                        const userId = auth.currentUser.uid;
-                        await db.ref('users/' + userId).set({
-                            state: {
-                                categories: [
-                                    { id: 'cat_school', name: '학교', color: '#ff3b30' },
-                                    { id: 'cat_life', name: '생활', color: '#34c759' },
-                                    { id: 'cat_project', name: '프로젝트', color: '#5856d6' }
-                                ],
-                                theme: 'light',
-                                rewardTarget: '100',
-                                reward: ''
-                            }
-                        });
-                    }
-                } catch(err) {
-                    el.authLoading.classList.add('hidden');
-                    if (err.code === 'auth/email-already-in-use') showAuthError("이미 존재하는 아이디입니다.");
-                    else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') showAuthError("아이디 또는 비밀번호가 잘못되었습니다.");
-                    else showAuthError("인증 오류: " + err.message);
-                }
-            };
-        }
-
-        if(el.logoutBtn) {
-            el.logoutBtn.onclick = () => {
-                auth.signOut().then(() => {
-                    location.reload();
-                });
-            };
-        }
-
-        // Listen for Auth State Changes
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                currentUser = user;
-                el.authOverlay.classList.add('hidden');
-                loadDataFromCloud();
-            } else {
-                currentUser = null;
-                el.authLoading.classList.add('hidden');
-                el.authOverlay.classList.remove('hidden');
-            }
-        });
-    }
-
-    function showAuthError(msg) {
-        el.authError.textContent = msg;
-        el.authError.classList.remove('hidden');
-        setTimeout(() => el.authError.classList.add('hidden'), 3000);
-    }
-
-    // --- DATA SYNC LOGIC ---
-    let syncTimeout = null;
-    const save = () => {
-        if (!currentUser) return;
-
-        // Ensure all tasks have a unique order
-        let maxOrder = 0;
-        state.tasks.forEach(t => { if(t.order > maxOrder) maxOrder = t.order; });
-        state.tasks = state.tasks.map(t => ({...t, order: t.order ?? (maxOrder++)}));
-
-        // Debounce cloud saving to avoid spamming the database
-        clearTimeout(syncTimeout);
-        syncTimeout = setTimeout(() => {
-            db.ref('users/' + currentUser.uid + '/state').set({
-                categories: state.categories || [],
-                tasks: state.tasks || [],
-                victoryLog: state.victoryLog || [],
-                reward: state.reward || '',
-                rewardTarget: state.rewardTarget || '100',
-                theme: state.theme || 'light'
-            });
-        }, 800);
-    };
-
-    function loadDataFromCloud() {
-        if (!currentUser) return;
-        el.authLoading.classList.remove('hidden'); // Show loading while fetching state
-        
-        db.ref('users/' + currentUser.uid + '/state').once('value')
-            .then(snapshot => {
-                const data = snapshot.val();
-                if (data) {
-                    state = {
-                        categories: data.categories || [],
-                        tasks: data.tasks || [],
-                        victoryLog: data.victoryLog || [],
-                        currentView: 'super-routine',
-                        reward: data.reward || '',
-                        rewardTarget: data.rewardTarget || '100',
-                        editMode: false,
-                        theme: data.theme || 'light'
-                    };
-                }
-                
-                // Ensure default categories exist if corrupted
-                if (!state.categories || state.categories.length === 0) {
-                     state.categories = [
-                        { id: 'cat_school', name: '학교', color: '#ff3b30' },
-                        { id: 'cat_life', name: '생활', color: '#34c759' },
-                        { id: 'cat_project', name: '프로젝트', color: '#5856d6' }
-                    ];
-                }
-                
-                el.authLoading.classList.add('hidden');
-                initAppUI();
-            })
-            .catch(err => {
-                el.authLoading.classList.add('hidden');
-                alert("데이터를 불러오지 못했습니다: " + err.message);
-                console.error(err);
-            });
-    }
-
 
     // --- INIT ---
-    function initAppUI() {
+    function init() {
+        const defaults = [
+            { id: 'cat_school', name: '학교', color: '#ff3b30' },
+            { id: 'cat_life', name: '생활', color: '#34c759' },
+            { id: 'cat_project', name: '프로젝트', color: '#5856d6' }
+        ];
+        let hasChanges = false;
+        defaults.forEach(d => {
+            if (!state.categories.find(c => c.name === d.name)) {
+                state.categories.unshift(d);
+                hasChanges = true;
+            }
+        });
+        if (hasChanges) save();
+        
         el.dateDisplay.textContent = new Date().toLocaleDateString('ko-KR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         if(el.rewardInput) el.rewardInput.value = state.reward;
         if($('reward-target-rate')) $('reward-target-rate').value = state.rewardTarget;
@@ -237,8 +89,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupEvents() {
         // Nav items
         document.querySelectorAll('.nav-item').forEach(i => {
-           // Skip logout button
-           if(i.id === 'logout-btn') return;
            i.onclick = () => setView(i.dataset.view);
         });
 
@@ -396,12 +246,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const idx = themes.indexOf(state.theme);
                 state.theme = themes[(idx + 1) % themes.length];
                 document.documentElement.setAttribute('data-theme', state.theme);
-                save(); // Save theme preference to cloud
+                localStorage.setItem('theme', state.theme);
                 updateThemeIcon();
             };
         }
 
-        // Export / Import -> Local Backup File still works, but data is safe in loud
+        // Export / Import
         if (el.exportBtn) {
             el.exportBtn.onclick = () => {
                 const data = JSON.stringify(state, null, 2);
@@ -435,7 +285,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Reset All Tasks & Categories
         if (el.resetAllBtn) {
             el.resetAllBtn.onclick = () => {
-                openConfirm("모든 데이터를 지우시겠습니까? (클라우드 데이터도 초기화됩니다)", () => {
+                openConfirm("모든 데이터를 날리고 초기화할까요?", () => {
+                    localStorage.clear();
                     state.tasks = [];
                     state.reward = '';
                     state.rewardTarget = '100';
@@ -445,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         { id: 'cat_project', name: '프로젝트', color: '#5856d6' }
                     ];
                     save();
-                    location.reload(); 
+                    location.reload(); // Hard reset
                 });
             };
         }
@@ -608,6 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 
                 // Update master routine date to next occurrence if this is the "official" completion
+                // (Optional: usually routines advance automatically when one is completed)
                 let next = t.dueDate ? new Date(t.dueDate) : new Date();
                 const advance = () => {
                     if (t.recurrence === 'daily') next.setDate(next.getDate() + 1);
@@ -641,6 +493,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function moveTask(id, dir) {
         let pool = getPool(); 
+        // We need to sort by ACTUAL order in the data, not just the filtered view.
+        // But for UI movement, we swap positions within the current view's sorted list.
         const idx = pool.findIndex(x => x.id === id);
         const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
         if (swapIdx >= 0 && swapIdx < pool.length) {
@@ -649,6 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
             pool[idx].order = targetOrder;
             pool[swapIdx].order = currentOrder;
             
+            // In case orders are same, force a gap
             if (pool[idx].order === pool[swapIdx].order) {
                 pool[idx].order = (dir === 'up') ? targetOrder - 1 : targetOrder + 1;
             }
@@ -708,7 +563,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getPool() {
-        if(!state.tasks) return [];
         const v = state.currentView;
         if (v === 'all') {
             return state.tasks
@@ -996,6 +850,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const days = ['일','월','화','수','목','금','토'];
         let t = null, m = null;
         
+        // Updated to handle optional '까지' and '언제까지'
         const regs = [
             /(오늘|내일|모레)(까지)?/, 
             /((이번주|다음주)\s*([월화수목금토일])요일?)(까지)?/,
@@ -1010,16 +865,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 const base = match[1];
                 
                 if (m === '언제까지') {
+                    // Just match it so it gets removed from text, but no date set
                     t = null;
                 } else if (base === '오늘' || m === '오늘') t = new Date(today);
                 else if (base === '내일' || m === '내일') { t = new Date(today); t.setDate(today.getDate()+1); }
                 else if (base === '모레' || m === '모레') { t = new Date(today); t.setDate(today.getDate()+2); }
-                else if (match[3]) {
+                else if (match[3]) { // week match
                     const dayName = match[3];
                     const diff = (days.indexOf(dayName) - today.getDay() + 7) % 7 || 7;
                     t = new Date(today); t.setDate(today.getDate() + diff + (match[2]==='다음주'?7:0));
+                } else if (match[3]) { // month/day match - wait, indices shift
+                    // Re-evaluating indices for month/day
                 }
                 
+                // Simplified logic to avoid index confusion with nested groups
                 if (m.includes('오늘')) t = new Date(today);
                 else if (m.includes('내일')) { t = new Date(today); t.setDate(today.getDate()+1); }
                 else if (m.includes('모레')) { t = new Date(today); t.setDate(today.getDate()+2); }
@@ -1055,13 +914,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!el.habitGrid) return;
         el.habitGrid.innerHTML = '';
         
+        // Define "Perfect Week" as Mon-Sun
         const now = new Date();
         const startOfThisWeek = new Date(now);
-        const day = now.getDay();
-        const diff = (day === 0 ? -6 : 1) - day;
+        const day = now.getDay(); // 0:Sun, 1:Mon
+        const diff = (day === 0 ? -6 : 1) - day; // diff to Mon
         startOfThisWeek.setDate(now.getDate() + diff);
         startOfThisWeek.setHours(0,0,0,0);
 
+        // Update week label
         const month = now.getMonth() + 1;
         const weekOfMonth = Math.ceil((now.getDate() + new Date(now.getFullYear(), now.getMonth(), 1).getDay()) / 7);
         const weekLabel = $('hg-week-label');
@@ -1094,6 +955,8 @@ document.addEventListener('DOMContentLoaded', () => {
             el.habitGrid.innerHTML += row + '</div>';
         });
 
+        // Check for Perfect Week (Only if Sun has passed or all checked)
+        // Let's check current progress
         if (routines.length > 0) {
             const allChecked = routines.every(r => days.every(d => state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === d.toDateString())));
             const weekKey = startOfThisWeek.toISOString();
@@ -1116,6 +979,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isWeekly = cell.dataset.weekly === 'true';
                 
                 if (isWeekly) {
+                    // For weekly, if ANY day in THIS week is completed, remove all completions for this week
                     const weekStarts = new Date(days[0]); weekStarts.setHours(0,0,0,0);
                     const weekEnds = new Date(days[6]); weekEnds.setHours(23,59,59,999);
                     
@@ -1126,7 +990,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         const rt = state.tasks.find(x => x.id === rid);
                         state.tasks.push({ ...rt, id: Date.now()+'h', originalRoutineId: rid, status: 'completed', completedAt: new Date(cell.dataset.day).toISOString(), isRoutineHistory: true });
-                    }
+        el.habitGrid.querySelectorAll('.hg-del-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const rid = btn.dataset.rid;
+                openConfirm('이 루틴을 완전히 삭제할까요?', () => {
+                    state.tasks = state.tasks.filter(t => t.id !== rid && t.originalRoutineId !== rid);
+                    save(); renderHabitGrid(); renderTasks();
+                });
+            };
+        });
+    }
                 } else {
                     const ex = state.tasks.find(t => t.originalRoutineId === rid && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds);
                     if(ex) state.tasks = state.tasks.filter(x => x.id !== ex.id);
@@ -1136,17 +1010,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
                 save(); renderTasks();
-            };
-        });
-
-        el.habitGrid.querySelectorAll('.hg-del-btn').forEach(btn => {
-            btn.onclick = (e) => {
-                e.stopPropagation();
-                const rid = btn.dataset.rid;
-                openConfirm('이 루틴을 완전히 삭제할까요?', () => {
-                    state.tasks = state.tasks.filter(t => t.id !== rid && t.originalRoutineId !== rid);
-                    save(); renderHabitGrid(); renderTasks();
-                });
             };
         });
     }
@@ -1202,6 +1065,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const ds = day.toDateString();
             const doneCount = pool.filter(r => {
                 if (r.recurrence === 'weekly') {
+                    // Check if completed ANY day during THIS week (days[0] to days[6])
                     const start = new Date(days[0]); start.setHours(0,0,0,0);
                     const end = new Date(days[6]); end.setHours(23,59,59,999);
                     return state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt) >= start && new Date(t.completedAt) <= end);
@@ -1250,6 +1114,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.strokeStyle = '#007aff'; ctx.lineWidth = 2; ctx.stroke();
         });
 
+        // Add day labels below x-axis
         ctx.fillStyle = state.theme === 'dark' ? '#a1a1a6' : '#8e8e93';
         ctx.font = '500 11px Inter';
         ctx.textAlign = 'center';
@@ -1259,6 +1124,5 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // FIREBASE INITIALIZATION ENTRY
-    setupAuth();
+    init();
 });
