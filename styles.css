@@ -112,6 +112,8 @@ body { background: var(--bg); color: var(--text); overflow: hidden; height: 100v
 .main-content{flex:1;display:flex;flex-direction:column;background:var(--main-bg);position:relative}
 .main-header{padding:28px 48px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-end}
 .main-header h1{font-size:1.6rem;font-weight:700;letter-spacing:-.03em;cursor:pointer;padding:2px 6px;border-radius:6px;transition:.2s;display:flex;align-items:center}
+.header-left { display: flex; align-items: center; gap: 12px; }
+.mobile-menu-btn { display: none; font-size: 1.2rem; margin-right: 4px; }
 .main-header h1:hover{background:var(--hover)}
 .inline-rename-header{border:none;border-bottom:2px solid var(--blue);outline:none;background:transparent;color:var(--text);font:inherit;width:100%}
 .main-header p{font-size:.82rem;color:var(--text2);margin-top:2px;font-weight:500}
@@ -752,4 +754,44 @@ input:checked + .slider:before { transform: translateX(20px); }
     0%, 100% { transform: translateX(0); }
     25% { transform: translateX(-4px); }
     75% { transform: translateX(4px); }
+}
+
+/* === MOBILE OPTIMIZATION === */
+.mobile-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+.mobile-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+@media (max-width: 768px) {
+    .mobile-menu-btn { display: flex; }
+    
+    .sidebar {
+        position: fixed; top: 0; bottom: 0; left: 0; z-index: 50; width: 280px;
+        transform: translateX(-100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.15); }
+    
+    .main-header { padding: 20px 20px 14px; flex-direction: column; align-items: flex-start; gap: 12px; }
+    .header-right { align-self: flex-end; width: 100%; display: flex; justify-content: flex-end; }
+    
+    .task-container { padding: 16px 20px 180px; }
+    .input-wrapper { padding: 12px 20px 20px; }
+    
+    .all-view-grid { grid-template-columns: 1fr; gap: 16px; }
+    
+    .sr-card { padding: 16px; }
+    .hg-row { grid-template-columns: 80px repeat(7, 30px); gap: 4px; }
+    .hg-header { grid-template-columns: 80px repeat(7, 30px); gap: 4px; }
+    .hg-cell { width: 28px; height: 28px; font-size: 0.6rem; }
+    
+    .todo-item { padding: 12px 14px; }
+    .todo-text { font-size: 0.85rem; }
+    
+    .victory-stats { flex-direction: column; gap: 12px; }
+    .settings-view, .victory-log-view { padding: 20px; }
+    .settings-group { padding: 16px; }
+    
+    .input-controls-top { flex-wrap: wrap; }
+    .auth-card { padding: 32px 24px; }
 }

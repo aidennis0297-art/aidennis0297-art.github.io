@@ -49,7 +49,9 @@
     </div>
 
     <div class="app-layout">
-        <aside class="sidebar">
+        <!-- Mobile Sidebar Overlay -->
+        <div id="mobile-overlay" class="mobile-overlay hidden"></div>
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <h2>Productivity</h2>
                 <div class="theme-switcher-mini" id="theme-toggle-btn">
@@ -117,6 +119,7 @@
         <main class="main-content">
             <header class="main-header">
                 <div class="header-left">
+                    <button id="mobile-menu-btn" class="icon-btn mobile-menu-btn"><i class="fas fa-bars"></i></button>
                     <h1 id="current-view-title">슈퍼루틴</h1>
                     <p id="date-display"></p>
                 </div>
@@ -187,16 +190,7 @@
                 <ul class="todo-list" id="todo-list"></ul>
 
                 <div id="settings-view" class="settings-view hidden">
-                    <div class="settings-group">
-                        <h3>데이터 백업 및 복원</h3>
-                        <p class="settings-desc">모든 루틴, 할 일, 카테고리를 파일로 저장하거나 다시 불러올 수 있습니다.</p>
-                        <div class="backup-actions">
-                            <button id="export-btn" class="modal-btn primary-outline"><i class="fas fa-file-export"></i> 데이터 내보내기</button>
-                            <button id="import-btn" class="modal-btn secondary-outline"><i class="fas fa-file-import"></i> 데이터 가져오기</button>
-                            <input type="file" id="import-file-input" class="hidden" accept=".json">
-                        </div>
-                    </div>
-
+    
                     <div class="settings-group">
                         <h3>데이터 초기화</h3>
                         <p class="settings-desc">모든 데이터를 삭제하고 초기 상태로 되돌립니다. 기본 카테고리는 유지됩니다.</p>
@@ -230,7 +224,8 @@
                     <div class="input-controls-top">
                         <label class="routine-toggle" id="routine-toggle-label">
                             <input type="checkbox" id="is-routine-cb">
-                            <i class="fas fa-sync-alt"></i> 루틴
+                            <span class="toggle-icon"><i class="fas fa-bell"></i></span>
+                            <span class="toggle-text">리마인더</span>
                         </label>
                         <select id="routine-period" class="hidden">
                             <option value="daily">매일</option>

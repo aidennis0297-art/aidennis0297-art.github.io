@@ -36,13 +36,14 @@ document.addEventListener('DOMContentLoaded', () => {
         srEditBtn: $('sr-edit-btn'), modal: $('custom-modal'),
         settingsView: $('settings-view'), resetAllBtn: $('reset-all-btn'),
         themeToggleBtn: $('theme-toggle-btn'), logoutBtn: $('logout-btn'),
-        exportBtn: $('export-btn'), importBtn: $('import-btn'), importFile: $('import-file-input'),
         victoryView: $('victory-log-view'), victoryList: $('victory-list'),
         // Auth DOM
         authOverlay: $('auth-overlay'), authId: $('auth-id'), authPw: $('auth-pw'),
         authSubmit: $('auth-submit-btn'), authSwitchBtn: $('auth-switch-btn'),
         authSwitchText: $('auth-switch-text'), authTitle: $('auth-title'),
-        authError: $('auth-error-msg'), authLoading: $('auth-loading')
+        authError: $('auth-error-msg'), authLoading: $('auth-loading'),
+        // Mobile DOM
+        mobileMenuBtn: $('mobile-menu-btn'), mobileOverlay: $('mobile-overlay'), sidebar: $('sidebar')
     };
 
     let isLoginMode = true;
@@ -251,6 +252,21 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
 
+        // Mobile Sidebar
+        const closeSidebar = () => {
+            if (el.sidebar) el.sidebar.classList.remove('open');
+            if (el.mobileOverlay) el.mobileOverlay.classList.add('hidden');
+        };
+        if (el.mobileMenuBtn) {
+            el.mobileMenuBtn.onclick = () => {
+                if (el.sidebar) el.sidebar.classList.add('open');
+                if (el.mobileOverlay) el.mobileOverlay.classList.remove('hidden');
+            };
+        }
+        if (el.mobileOverlay) {
+            el.mobileOverlay.onclick = closeSidebar;
+        }
+
         // Add Task
         el.addBtn.onclick = (e) => { e.preventDefault(); addTask(); };
         el.todoInput.onkeypress = e => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } };
@@ -304,10 +320,16 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         };
 
-        // Routine Toggle
+        // Routine Toggle - swap between 리마인더 and 루틴
         el.isRoutineCb.onchange = e => {
-            el.routineToggle.classList.toggle('active', e.target.checked);
-            el.routinePeriod.classList.toggle('hidden', !e.target.checked);
+            const isRoutine = e.target.checked;
+            el.routineToggle.classList.toggle('active', isRoutine);
+            el.routinePeriod.classList.toggle('hidden', !isRoutine);
+            // Update icon and text
+            const iconEl = el.routineToggle.querySelector('.toggle-icon i');
+            const textEl = el.routineToggle.querySelector('.toggle-text');
+            if (iconEl) iconEl.className = isRoutine ? 'fas fa-sync-alt' : 'fas fa-bell';
+            if (textEl) textEl.textContent = isRoutine ? '루틴' : '리마인더';
         };
 
         // Combined Edit Mode for Super Routine
@@ -401,36 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         }
 
-        // Export / Import -> Local Backup File still works, but data is safe in loud
-        if (el.exportBtn) {
-            el.exportBtn.onclick = () => {
-                const data = JSON.stringify(state, null, 2);
-                const blob = new Blob([data], {type: "application/json"});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = `Productivity_Backup_${new Date().toISOString().split('T')[0]}.json`;
-                a.click(); URL.revokeObjectURL(url);
-            };
-        }
-        if (el.importBtn) {
-            el.importBtn.onclick = () => el.importFile.click();
-        }
-        if (el.importFile) {
-            el.importFile.onchange = (e) => {
-                const file = e.target.files[0]; if(!file) return;
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    try {
-                        const imported = JSON.parse(ev.target.result);
-                        if (imported.tasks && imported.categories) {
-                            state = {...state, ...imported};
-                            save(); location.reload();
-                        } else { alert("유효한 백업 파일이 아닙니다."); }
-                    } catch(err) { alert("파일을 읽는 중 오류가 발생했습니다."); }
-                };
-                reader.readAsText(file);
-            };
-        }
+
 
         // Reset All Tasks & Categories
         if (el.resetAllBtn) {
@@ -491,6 +484,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.nav-item').forEach(i => {
            if (i.dataset.view) i.classList.toggle('active', i.dataset.view === v);
         });
+
+        // Close mobile sidebar on navigation
+        if (el.sidebar && el.sidebar.classList.contains('open')) {
+            el.sidebar.classList.remove('open');
+            if (el.mobileOverlay) el.mobileOverlay.classList.add('hidden');
+        }
         
         const isSR = v === 'super-routine';
         if ($('sr-extras')) $('sr-extras').classList.toggle('hidden', !isSR);
@@ -567,9 +566,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (act === 'harddelete') { openConfirm("영구 삭제할까요?", () => { state.tasks = state.tasks.filter(x => x.id !== id); save(); renderTasks(); }); }
         else if (act === 'move') { moveTask(id, e.target.closest('[data-act]').dataset.dir); }
         else if (act === 'edit-text') inlineEdit(item, t);
-        else if (act === 'share') shareTask(t);
-        else if (act === 'gcal') addToGoogleCalendar(t);
-        else if (act === 'ics') exportToICS(t);
+
     }
 
     function inlineEdit(li, t) {
@@ -657,55 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function shareTask(t) {
-        if (!navigator.share) {
-            alert("이 브라우저에서는 공유 기능을 지원하지 않습니다.");
-            return;
-        }
-        navigator.share({
-            title: t.text,
-            text: `[Productivity] ${t.text}${t.dueDate ? '\n마감: ' + new Date(t.dueDate).toLocaleDateString() : ''}`,
-        }).catch(console.error);
-    }
 
-    function addToGoogleCalendar(t) {
-        const title = encodeURIComponent(t.text);
-        let dates = '';
-        if (t.dueDate) {
-            const d = new Date(t.dueDate);
-            const start = d.toISOString().replace(/-|:|\.\d\d\d/g, "");
-            const end = new Date(d.getTime() + 60*60*1000).toISOString().replace(/-|:|\.\d\d\d/g, "");
-            dates = `&dates=${start}/${end}`;
-        }
-        const url = `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}${dates}&details=Created+via+Productivity+App`;
-        window.open(url, '_blank');
-    }
-
-    function exportToICS(t) {
-        const start = t.dueDate ? new Date(t.dueDate) : new Date();
-        const end = new Date(start.getTime() + 60*60*1000);
-        const fmt = d => d.toISOString().replace(/-|:|\.\d\d\d/g, "");
-        
-        const icsMsg = [
-            "BEGIN:VCALENDAR",
-            "VERSION:2.0",
-            "BEGIN:VEVENT",
-            `DTSTART:${fmt(start)}`,
-            `DTEND:${fmt(end)}`,
-            `SUMMARY:${t.text}`,
-            "DESCRIPTION:Created via Productivity App",
-            "END:VEVENT",
-            "END:VCALENDAR"
-        ].join("\r\n");
-
-        const blob = new Blob([icsMsg], { type: 'text/calendar;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${t.text.replace(/[/\\?%*:|"<>]/g, '-')}.ics`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
 
     function getPool() {
         if(!state.tasks) return [];
@@ -892,11 +841,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (t.status === 'deleted') {
                 inner += `<button class="act-btn del" data-act="harddelete" title="영구 삭제"><i class="fas fa-times"></i></button>`;
             } else {
-                if (!isDone) {
-                    inner += `<button class="act-btn" data-act="share" title="공유하기"><i class="fas fa-share-alt"></i></button>`;
-                    inner += `<button class="act-btn" data-act="gcal" title="구글 캘린더 추가"><i class="fab fa-google"></i></button>`;
-                    inner += `<button class="act-btn" data-act="ics" title="ICS 저장"><i class="far fa-calendar-plus"></i></button>`;
-                }
                 inner += `<button class="act-btn del" data-act="delete" title="삭제"><i class="fas fa-trash"></i></button>`;
             }
             acts = `<div class="item-actions">${inner}</div>`;
