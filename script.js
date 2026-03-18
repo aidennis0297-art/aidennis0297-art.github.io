@@ -284,7 +284,12 @@ document.addEventListener('DOMContentLoaded', () => {
         el.addBtn.onclick = (e) => { e.preventDefault(); addTask(); };
         el.todoInput.onkeypress = e => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } };
         el.todoInput.oninput = handleHL;
-        el.todoInput.onfocus = () => { if ($('date-hint-tooltip')) $('date-hint-tooltip').classList.add('visible'); };
+        el.todoInput.onfocus = () => { 
+            if ($('date-hint-tooltip') && !localStorage.getItem('dateHintShown')) {
+                $('date-hint-tooltip').classList.add('visible'); 
+                localStorage.setItem('dateHintShown', 'true');
+            }
+        };
         el.todoInput.onblur = () => { setTimeout(() => { if ($('date-hint-tooltip')) $('date-hint-tooltip').classList.remove('visible'); }, 200); };
 
         // Custom Modal Wiring
@@ -965,6 +970,7 @@ document.addEventListener('DOMContentLoaded', () => {
             /(오늘|내일|모레)(까지)?/, 
             /((이번주|다음주)\s*([월화수목금토일])요일?)(까지)?/,
             /((\d+)월\s*(\d+)일)(까지)?/,
+            /((\d{1,2})(\d{2}))(까지)?/,
             /언제까지/
         ];
         
@@ -995,9 +1001,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         t = new Date(today); t.setDate(today.getDate() + diff + (m.includes('다음주')?7:0));
                     }
                 } else {
-                    const mdMatch = m.match(/(\d+)월\s*(\d+)일/);
-                    if (mdMatch) {
-                        t = new Date(today); t.setMonth(parseInt(mdMatch[1])-1); t.setDate(parseInt(mdMatch[2]));
+                    if (m.includes('월')) {
+                        const mdMatch = m.match(/(\d+)월\s*(\d+)일/);
+                        if (mdMatch) { t = new Date(today); t.setMonth(parseInt(mdMatch[1])-1); t.setDate(parseInt(mdMatch[2])); }
+                    } else {
+                        const numMatch = m.match(/(\d{1,2})(\d{2})/);
+                        if (numMatch) { t = new Date(today); t.setMonth(parseInt(numMatch[1])-1); t.setDate(parseInt(numMatch[2])); }
                     }
                 }
                 break;
@@ -1043,6 +1052,38 @@ document.addEventListener('DOMContentLoaded', () => {
         days.forEach(d => h += `<div class="hg-cell-hdr ${d.toDateString()===new Date().toDateString()?'today':''}">${['월','화','수','목','금','토','일'][days.indexOf(d)]}</div>`);
         el.habitGrid.innerHTML = h + '</div>';
         
+        // --- 리마인더 섹션 (habit grid 상단으로 이동) ---
+        const reminders = state.tasks.filter(t => t.status === 'active' && !t.isRoutine && !t.isRoutineHistory);
+        if (reminders.length > 0) {
+            const separator = document.createElement('div');
+            separator.className = 'hg-reminder-separator';
+            separator.innerHTML = `<span><i class="fas fa-bell"></i> 리마인더</span>`;
+            el.habitGrid.appendChild(separator);
+
+            reminders.forEach(r => {
+                let dueMeta = '';
+                if (r.dueDate) {
+                    const d = new Date(r.dueDate);
+                    const now2 = new Date(); now2.setHours(0,0,0,0);
+                    const tmr2 = new Date(now2); tmr2.setDate(now2.getDate() + 1);
+                    let label = d.toLocaleDateString('ko-KR', {month:'short', day:'numeric'});
+                    let urgent = false;
+                    if (d < now2 || d.toDateString() === now2.toDateString()) { label = '오늘까지'; urgent = true; }
+                    else if (d.toDateString() === tmr2.toDateString()) { label = '내일까지'; urgent = true; }
+                    dueMeta = `<span class="hg-reminder-due ${urgent?'urgent':''}"><i class="far fa-calendar"></i> ${label}</span>`;
+                }
+                const delBtn2 = state.hgEditMode ? `<i class="fas fa-minus-circle hg-del-btn" data-rid="${r.id}" data-is-reminder="true"></i>` : '';
+                const row = document.createElement('div');
+                row.className = 'hg-reminder-row';
+                row.dataset.rid = r.id;
+                row.innerHTML = `
+                    <div class="hg-reminder-check" data-act="complete" data-rid="${r.id}"><i class="fas fa-check"></i></div>
+                    <div class="hg-reminder-label">${delBtn2}<span class="hg-reminder-text">${esc(r.text)}</span>${dueMeta}</div>
+                `;
+                el.habitGrid.appendChild(row);
+            });
+        }
+
         const routines = getPool().filter(r => r.recurrence !== 'monthly');
         routines.forEach(r => {
             const isWeekly = r.recurrence === 'weekly';
@@ -1115,38 +1156,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
 
-        // --- 리마인더 섹션 (habit grid 하단) ---
-        const reminders = state.tasks.filter(t => t.status === 'active' && !t.isRoutine && !t.isRoutineHistory);
-        if (reminders.length > 0) {
-            // 구분선 + 헤더
-            const separator = document.createElement('div');
-            separator.className = 'hg-reminder-separator';
-            separator.innerHTML = `<span><i class="fas fa-bell"></i> 리마인더</span>`;
-            el.habitGrid.appendChild(separator);
-
-            reminders.forEach(r => {
-                // due date label
-                let dueMeta = '';
-                if (r.dueDate) {
-                    const d = new Date(r.dueDate);
-                    const now2 = new Date(); now2.setHours(0,0,0,0);
-                    const tmr2 = new Date(now2); tmr2.setDate(now2.getDate() + 1);
-                    let label = d.toLocaleDateString('ko-KR', {month:'short', day:'numeric'});
-                    let urgent = false;
-                    if (d < now2 || d.toDateString() === now2.toDateString()) { label = '오늘까지'; urgent = true; }
-                    else if (d.toDateString() === tmr2.toDateString()) { label = '내일까지'; urgent = true; }
-                    dueMeta = `<span class="hg-reminder-due ${urgent?'urgent':''}"><i class="far fa-calendar"></i> ${label}</span>`;
-                }
-                const delBtn2 = state.hgEditMode ? `<i class="fas fa-minus-circle hg-del-btn" data-rid="${r.id}" data-is-reminder="true"></i>` : '';
-                const row = document.createElement('div');
-                row.className = 'hg-reminder-row';
-                row.dataset.rid = r.id;
-                row.innerHTML = `
-                    <div class="hg-reminder-check" data-act="complete" data-rid="${r.id}"><i class="fas fa-check"></i></div>
-                    <div class="hg-reminder-label">${delBtn2}<span class="hg-reminder-text">${esc(r.text)}</span>${dueMeta}</div>
-                `;
-                el.habitGrid.appendChild(row);
-            });
+        // --- 리마인더 섹션 클릭/삭제 핸들러 ---
 
             // click handler for reminder check
             el.habitGrid.querySelectorAll('.hg-reminder-check').forEach(btn => {
@@ -1172,7 +1182,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 };
             });
-        }
     }
 
     function renderVictoryLog() {
