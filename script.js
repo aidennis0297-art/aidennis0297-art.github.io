@@ -68,55 +68,68 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Handle Submit
-        if(el.authSubmit) {
-            el.authSubmit.onclick = async () => {
-                const id = el.authId.value.trim();
-                const pw = el.authPw.value.trim();
-                
-                // Validation: English letters & numbers only, config length >= 4
-                const validRegex = /^[a-zA-Z0-9]{4,}$/;
-                if (!validRegex.test(id)) {
-                    showAuthError("아이디는 영문/숫자 4자 이상이어야 합니다.");
-                    return;
-                }
-                if (!validRegex.test(pw)) {
-                    showAuthError("비밀번호는 영문/숫자 4자 이상이어야 합니다.");
-                    return;
-                }
+        const doAuthSubmit = async () => {
+            const id = el.authId.value.trim();
+            const pw = el.authPw.value.trim();
+            
+            // Validation: English letters & numbers only, config length >= 4
+            const validRegex = /^[a-zA-Z0-9]{4,}$/;
+            if (!validRegex.test(id)) {
+                showAuthError("아이디는 영문/숫자 4자 이상이어야 합니다.");
+                return;
+            }
+            if (!validRegex.test(pw)) {
+                showAuthError("비밀번호는 영문/숫자 4자 이상이어야 합니다.");
+                return;
+            }
 
-                el.authLoading.classList.remove('hidden');
+            el.authLoading.classList.remove('hidden');
+            
+            try {
+                // Firebase Auth expects emails. We will fake an email for the ID:
+                const mockEmail = `${id.toLowerCase()}@productivity.local`; 
                 
-                try {
-                    // Firebase Auth expects emails. We will fake an email for the ID:
-                    const mockEmail = `${id.toLowerCase()}@productivity.local`; 
+                if (isLoginMode) {
+                    await auth.signInWithEmailAndPassword(mockEmail, pw);
+                } else {
+                    await auth.createUserWithEmailAndPassword(mockEmail, pw);
                     
-                    if (isLoginMode) {
-                        await auth.signInWithEmailAndPassword(mockEmail, pw);
-                    } else {
-                        // Check if exists first (firebase handles this but we want a nice message)
-                        await auth.createUserWithEmailAndPassword(mockEmail, pw);
-                        
-                        // Initialize empty data structure for new user
-                        const userId = auth.currentUser.uid;
-                        await db.ref('users/' + userId).set({
-                            state: {
-                                categories: [
-                                    { id: 'cat_school', name: '학교', color: '#ff3b30' },
-                                    { id: 'cat_life', name: '생활', color: '#34c759' },
-                                    { id: 'cat_project', name: '프로젝트', color: '#5856d6' }
-                                ],
-                                theme: 'light',
-                                rewardTarget: '100',
-                                reward: ''
-                            }
-                        });
-                    }
-                } catch(err) {
-                    el.authLoading.classList.add('hidden');
-                    if (err.code === 'auth/email-already-in-use') showAuthError("이미 존재하는 아이디입니다.");
-                    else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') showAuthError("아이디 또는 비밀번호가 잘못되었습니다.");
-                    else showAuthError("인증 오류: " + err.message);
+                    // Initialize empty data structure for new user
+                    const userId = auth.currentUser.uid;
+                    await db.ref('users/' + userId).set({
+                        state: {
+                            categories: [
+                                { id: 'cat_school', name: '학교', color: '#ff3b30' },
+                                { id: 'cat_life', name: '생활', color: '#34c759' },
+                                { id: 'cat_project', name: '프로젝트', color: '#5856d6' }
+                            ],
+                            theme: 'light',
+                            rewardTarget: '100',
+                            reward: ''
+                        }
+                    });
                 }
+            } catch(err) {
+                el.authLoading.classList.add('hidden');
+                if (err.code === 'auth/email-already-in-use') showAuthError("이미 존재하는 아이디입니다.");
+                else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') showAuthError("아이디 또는 비밀번호가 잘못되었습니다.");
+                else showAuthError("인증 오류: " + err.message);
+            }
+        };
+
+        if(el.authSubmit) {
+            el.authSubmit.onclick = doAuthSubmit;
+        }
+
+        // Enter key on auth fields: ID -> focus PW, PW -> submit
+        if(el.authId) {
+            el.authId.onkeydown = (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); el.authPw.focus(); }
+            };
+        }
+        if(el.authPw) {
+            el.authPw.onkeydown = (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); doAuthSubmit(); }
             };
         }
 
@@ -271,6 +284,8 @@ document.addEventListener('DOMContentLoaded', () => {
         el.addBtn.onclick = (e) => { e.preventDefault(); addTask(); };
         el.todoInput.onkeypress = e => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } };
         el.todoInput.oninput = handleHL;
+        el.todoInput.onfocus = () => { if ($('date-hint-tooltip')) $('date-hint-tooltip').classList.add('visible'); };
+        el.todoInput.onblur = () => { setTimeout(() => { if ($('date-hint-tooltip')) $('date-hint-tooltip').classList.remove('visible'); }, 200); };
 
         // Custom Modal Wiring
         $('modal-cancel-btn').onclick = closeModal;

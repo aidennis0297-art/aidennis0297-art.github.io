@@ -286,6 +286,39 @@ body { background: var(--bg); color: var(--text); overflow: hidden; height: 100v
 #add-btn {width:34px;height:34px;border-radius:50%;background:var(--blue);color:white;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s;flex-shrink:0}
 #add-btn:hover{background:var(--blue);transform:scale(1.1);box-shadow: 0 0 10px rgba(0, 122, 255, 0.4)}
 
+/* Date Hint Tooltip */
+.date-hint-tooltip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    color: var(--text2);
+    background: var(--hover);
+    border-radius: 10px;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    pointer-events: none;
+}
+.date-hint-tooltip.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+.date-hint-tooltip i {
+    color: var(--blue);
+    font-size: 0.7rem;
+    flex-shrink: 0;
+}
+.date-hint-tooltip strong {
+    color: var(--blue);
+    font-weight: 700;
+}
+[data-theme='dark'] .date-hint-tooltip {
+    background: rgba(255,255,255,0.06);
+}
+
 /* === SR EXTRAS === */
 .sr-extras{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px}
 .sr-extras > .reward-card { grid-column: 1 / -1; }
