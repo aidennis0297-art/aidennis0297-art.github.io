@@ -415,6 +415,162 @@ body { background: var(--bg); color: var(--text); overflow: hidden; height: 100v
     color: #fff;
 }
 
+/* === REMINDER SECTION IN HABIT GRID === */
+.hg-reminder-separator {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 0 8px;
+    padding: 0 4px;
+}
+.hg-reminder-separator::before,
+.hg-reminder-separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--border), transparent);
+}
+.hg-reminder-separator span {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    background: var(--hover);
+    border-radius: 20px;
+}
+.hg-reminder-separator span i {
+    color: var(--yellow);
+    font-size: 0.7rem;
+}
+
+.hg-reminder-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 6px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--sh-sm);
+    animation: reminderSlideIn 0.3s ease;
+}
+.hg-reminder-row:hover {
+    background: var(--hover);
+    transform: translateY(-1px);
+    box-shadow: var(--sh-md);
+}
+
+@keyframes reminderSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.hg-reminder-check {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    background: transparent;
+}
+.hg-reminder-check i {
+    font-size: 0.55rem;
+    color: transparent;
+    transition: color 0.2s;
+}
+.hg-reminder-check:hover {
+    border-color: var(--green);
+    background: rgba(52, 199, 89, 0.1);
+    transform: scale(1.1);
+}
+.hg-reminder-check:hover i {
+    color: var(--green);
+}
+
+.hg-reminder-label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.hg-reminder-text {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.hg-reminder-due {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text2);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--hover);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.hg-reminder-due.urgent {
+    color: var(--red);
+    background: rgba(255, 59, 48, 0.08);
+    animation: pulseRed 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+.hg-reminder-due i {
+    font-size: 0.6rem;
+}
+
+/* Dark theme adjustments for reminders */
+[data-theme='dark'] .hg-reminder-row {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme='dark'] .hg-reminder-row:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+[data-theme='dark'] .hg-reminder-separator span {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* Mono theme adjustments for reminders */
+[data-theme='mono'] .hg-reminder-row {
+    border: 2px solid #000;
+    border-radius: 0;
+}
+[data-theme='mono'] .hg-reminder-check {
+    border: 2px solid #000;
+    border-radius: 0;
+}
+
+/* Mobile adjustments for reminders */
+@media (max-width: 768px) {
+    .hg-reminder-row {
+        padding: 8px 12px;
+    }
+    .hg-reminder-text {
+        font-size: 0.78rem;
+    }
+}
+
 /* Color Picker Popover */
 .color-picker-popover{position:fixed;z-index:100;background:var(--card);border-radius:var(--r-lg);box-shadow:var(--sh-lg);padding:10px;border:1px solid var(--border);animation:popIn .2s cubic-bezier(0.18, 0.89, 0.32, 1.28)}
 .color-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}

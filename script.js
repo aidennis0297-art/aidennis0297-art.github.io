@@ -670,6 +670,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
         }
         if (v === 'super-routine') return state.tasks.filter(t => t.status === 'active' && t.isRoutine && !t.isRoutineHistory).sort((a,b) => (a.order||0) - (b.order||0));
+        if (v === 'sr-reminders') return state.tasks.filter(t => t.status === 'active' && !t.isRoutine && !t.isRoutineHistory).sort((a,b) => {
+            const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+            const db = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+            if (da !== db) return da - db;
+            return (a.order || 0) - (b.order || 0);
+        });
         if (v === 'history') return state.tasks.filter(t => t.status === 'completed').sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt));
         if (v === 'trash') return state.tasks.filter(t => t.status === 'deleted').sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
         return state.tasks.filter(t => t.status === 'active' && t.categoryId === v && !t.isRoutineHistory).sort((a,b) => (a.order||0) - (b.order||0));
@@ -1093,6 +1099,65 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             };
         });
+
+        // --- 리마인더 섹션 (habit grid 하단) ---
+        const reminders = state.tasks.filter(t => t.status === 'active' && !t.isRoutine && !t.isRoutineHistory);
+        if (reminders.length > 0) {
+            // 구분선 + 헤더
+            const separator = document.createElement('div');
+            separator.className = 'hg-reminder-separator';
+            separator.innerHTML = `<span><i class="fas fa-bell"></i> 리마인더</span>`;
+            el.habitGrid.appendChild(separator);
+
+            reminders.forEach(r => {
+                // due date label
+                let dueMeta = '';
+                if (r.dueDate) {
+                    const d = new Date(r.dueDate);
+                    const now2 = new Date(); now2.setHours(0,0,0,0);
+                    const tmr2 = new Date(now2); tmr2.setDate(now2.getDate() + 1);
+                    let label = d.toLocaleDateString('ko-KR', {month:'short', day:'numeric'});
+                    let urgent = false;
+                    if (d < now2 || d.toDateString() === now2.toDateString()) { label = '오늘까지'; urgent = true; }
+                    else if (d.toDateString() === tmr2.toDateString()) { label = '내일까지'; urgent = true; }
+                    dueMeta = `<span class="hg-reminder-due ${urgent?'urgent':''}"><i class="far fa-calendar"></i> ${label}</span>`;
+                }
+                const delBtn2 = state.hgEditMode ? `<i class="fas fa-minus-circle hg-del-btn" data-rid="${r.id}" data-is-reminder="true"></i>` : '';
+                const row = document.createElement('div');
+                row.className = 'hg-reminder-row';
+                row.dataset.rid = r.id;
+                row.innerHTML = `
+                    <div class="hg-reminder-check" data-act="complete" data-rid="${r.id}"><i class="fas fa-check"></i></div>
+                    <div class="hg-reminder-label">${delBtn2}<span class="hg-reminder-text">${esc(r.text)}</span>${dueMeta}</div>
+                `;
+                el.habitGrid.appendChild(row);
+            });
+
+            // click handler for reminder check
+            el.habitGrid.querySelectorAll('.hg-reminder-check').forEach(btn => {
+                btn.onclick = () => {
+                    const rid = btn.dataset.rid;
+                    const t = state.tasks.find(x => x.id === rid);
+                    if (t) {
+                        t.status = 'completed';
+                        t.completedAt = new Date().toISOString();
+                        save(); renderTasks();
+                    }
+                };
+            });
+
+            // delete handler for reminder delete
+            el.habitGrid.querySelectorAll('.hg-del-btn[data-is-reminder]').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    const rid = btn.dataset.rid;
+                    openConfirm('이 리마인더를 삭제할까요?', () => {
+                        state.tasks = state.tasks.filter(t => t.id !== rid);
+                        save(); renderHabitGrid(); renderTasks();
+                    });
+                };
+            });
+        }
     }
 
     function renderVictoryLog() {
@@ -1141,10 +1206,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const days = []; for(let i=0; i<7; i++){ const d = new Date(startOfThisWeek); d.setDate(startOfThisWeek.getDate() + i); days.push(d); }
         
         const pool = state.tasks.filter(t => t.status === 'active' && t.isRoutine && !t.isRoutineHistory && t.recurrence !== 'monthly');
+        // 리마인더도 퍼센트 계산에 포함 (완료 시 카운트, 삭제된 건 제외)
+        const reminderPool = state.tasks.filter(t => !t.isRoutine && !t.isRoutineHistory && t.status !== 'deleted');
+        const reminderDoneCount = reminderPool.filter(t => t.status === 'completed').length;
+        const reminderTotal = reminderPool.length;
+        
         const rates = days.map(day => {
-            if(!pool.length) return 0;
             const ds = day.toDateString();
-            const doneCount = pool.filter(r => {
+            const totalItems = pool.length + reminderTotal;
+            if (!totalItems) return 0;
+            
+            const routineDone = pool.filter(r => {
                 if (r.recurrence === 'weekly') {
                     const start = new Date(days[0]); start.setHours(0,0,0,0);
                     const end = new Date(days[6]); end.setHours(23,59,59,999);
@@ -1153,7 +1225,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     return state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds);
                 }
             }).length;
-            return (doneCount / pool.length) * 100;
+            
+            return ((routineDone + reminderDoneCount) / totalItems) * 100;
         });
 
         const weeklyAvg = rates.length ? Math.round(rates.reduce((a,b)=>a+b,0)/7) : 0;
