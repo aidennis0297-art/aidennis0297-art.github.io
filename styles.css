@@ -282,7 +282,7 @@ body { background: var(--bg); color: var(--text); overflow: hidden; height: 100v
 .input-highlights{position:absolute;inset:0;padding:10px 14px;pointer-events:none;font:inherit;font-size:.9rem;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;overflow:hidden;color:transparent}
 .highlight-bg{background:var(--blue-bg);border-radius:4px;padding:2px 0;color:var(--blue);font-weight:600}
 .highlight-bg-red{background:rgba(255,59,48,0.12);border-radius:4px;padding:2px 0;color:var(--red);font-weight:700;text-shadow:0 0 5px rgba(255,59,48,0.2)}
-#todo-input{width:100%;border:none;outline:none;padding:10px 14px;font-size:.9rem;font-family:inherit;background:transparent;position:relative;z-index:1}
+#todo-input{width:100%;border:none;outline:none;padding:10px 14px;font-size:.9rem;font-family:inherit;background:transparent;position:relative;z-index:1;color:var(--text);}
 #add-btn {width:34px;height:34px;border-radius:50%;background:var(--blue);color:white;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s;flex-shrink:0}
 #add-btn:hover{background:var(--blue);transform:scale(1.1);box-shadow: 0 0 10px rgba(0, 122, 255, 0.4)}
 
@@ -983,4 +983,25 @@ input:checked + .slider:before { transform: translateX(20px); }
     
     .input-controls-top { flex-wrap: wrap; }
     .auth-card { padding: 32px 24px; }
+}
+
+/* === DOWNLOAD BUTTON STYLE === */
+.download-widget-btn {
+    border: 1px dashed var(--blue);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+}
+
+.download-widget-btn:hover {
+    background: var(--blue) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2);
+}
+
+.download-widget-btn:hover i,
+.download-widget-btn:hover span {
+    color: white !important;
+}
+
+.download-widget-btn:active {
+    transform: translateY(0);
 }
