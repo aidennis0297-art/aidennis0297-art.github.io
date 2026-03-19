@@ -28,7 +28,16 @@ document.addEventListener('DOMContentLoaded', () => {
         addBtn: $('add-btn'), viewTitle: $('current-view-title'), dateDisplay: $('date-display'),
         catList: $('category-list'), addCatBtn: $('add-category-btn'),
         isRoutineCb: $('is-routine-cb'), routineToggle: $('routine-toggle-label'),
-        routinePeriod: $('routine-period'), catSelect: $('task-category-select'),
+        routinePeriod: $('routine-period'),
+        routinePeriodWrapper: $('routine-period-wrapper'),
+        routineWeeklyOptions: $('routine-weekly-options'),
+        routineMonthlyOptions: $('routine-monthly-options'),
+        routineDailyOptions: $('routine-daily-options'),
+        routineTime: $('routine-time'),
+        monthlyType: $('monthly-type'),
+        monthlyDateSelect: $('monthly-date-select'),
+        monthlyRelativeSelect: $('monthly-relative-select'),
+        catSelect: $('task-category-select'),
         badgeRoutine: $('badge-routine'), inputWrapper: $('input-wrapper'), 
         rewardInput: $('reward-input'), habitGrid: $('habit-grid'),
         achieveChart: $('achievement-chart'), todayRate: $('today-rate'),
@@ -260,8 +269,11 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.collapsible, .collapsible-card').forEach(h => {
             h.onclick = () => {
                 h.classList.toggle('collapsed');
+                const card = h.closest('.sr-card');
+                if (card) card.classList.toggle('collapsed');
                 const target = $(h.dataset.target);
                 if (target) target.classList.toggle('hidden');
+                if (h.dataset.target === 'chart-section') renderChart();
             };
         });
 
@@ -344,12 +356,29 @@ document.addEventListener('DOMContentLoaded', () => {
         el.isRoutineCb.onchange = e => {
             const isRoutine = e.target.checked;
             el.routineToggle.classList.toggle('active', isRoutine);
-            el.routinePeriod.classList.toggle('hidden', !isRoutine);
+            el.routinePeriodWrapper.classList.toggle('hidden', !isRoutine);
+            
+            // Show sub-options based on type
+            if (isRoutine) el.routinePeriod.dispatchEvent(new Event('change'));
+
             // Update icon and text
             const iconEl = el.routineToggle.querySelector('.toggle-icon i');
             const textEl = el.routineToggle.querySelector('.toggle-text');
             if (iconEl) iconEl.className = isRoutine ? 'fas fa-sync-alt' : 'fas fa-bell';
             if (textEl) textEl.textContent = isRoutine ? '루틴' : '리마인더';
+        };
+
+        el.routinePeriod.onchange = () => {
+            const v = el.routinePeriod.value;
+            el.routineDailyOptions.classList.toggle('hidden', v !== 'daily');
+            el.routineWeeklyOptions.classList.toggle('hidden', v !== 'weekly');
+            el.routineMonthlyOptions.classList.toggle('hidden', v !== 'monthly');
+        };
+
+        el.monthlyType.onchange = () => {
+            const v = el.monthlyType.value;
+            el.monthlyDateSelect.classList.toggle('hidden', v !== 'date');
+            el.monthlyRelativeSelect.classList.toggle('hidden', v !== 'relative');
         };
 
         // Combined Edit Mode for Super Routine
@@ -554,19 +583,54 @@ document.addEventListener('DOMContentLoaded', () => {
         let finalPeriod = el.routinePeriod.value;
 
         // Auto-detect routine keywords in input
-        const routineRegs = [
-            { reg: /(매일|이틀마다|3일마다)/, period: { '매일': 'daily', '이틀마다': 'every2days', '3일마다': 'every3days' } },
-            { reg: /매주\s*([월화수목금토일])요일마다/, periodBase: { '월': 'mon', '화': 'tue', '수': 'wed', '목': 'thu', '금': 'fri', '토': 'sat', '일': 'sun' } }
-        ];
+        const daysMap = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 0 };
+        const weekMap = { '첫째주': 1, '둘째주': 2, '셋째주': 3, '넷째주': 4, '마지막주': 5 };
 
-        for (let r of routineRegs) {
-            const match = taskText.match(r.reg);
-            if (match) {
-                finalIsRoutine = true;
-                if (r.period) finalPeriod = r.period[match[1]];
-                else if (r.periodBase) finalPeriod = r.periodBase[match[1]];
-                taskText = taskText.replace(match[0], '').replace(/\s+/g, ' ').trim();
-                break;
+        // 1. Weekly with specific day
+        const weeklyMatch = taskText.match(/매주\s*([월화수목금토일])요일(마다)?/);
+        if (weeklyMatch) {
+            finalIsRoutine = true; finalPeriod = 'weekly';
+            const dayNum = daysMap[weeklyMatch[1]];
+            // Update UI
+            el.routinePeriod.value = 'weekly';
+            el.routinePeriod.dispatchEvent(new Event('change'));
+            el.routineWeeklyOptions.querySelectorAll('input').forEach(i => i.checked = parseInt(i.value) === dayNum);
+            taskText = taskText.replace(weeklyMatch[0], '').replace(/\s+/g, ' ').trim();
+        }
+        
+        // 2. Monthly with relative week/day
+        const monthlyRelMatch = taskText.match(/매달\s*(첫째주|둘째주|셋째주|넷째주|마지막주)\s*([월화수목금토일])요일(마다)?/);
+        if (monthlyRelMatch) {
+            finalIsRoutine = true; finalPeriod = 'monthly';
+            el.routinePeriod.value = 'monthly';
+            el.routinePeriod.dispatchEvent(new Event('change'));
+            el.monthlyType.value = 'relative';
+            el.monthlyType.dispatchEvent(new Event('change'));
+            $('monthly-week-num').value = weekMap[monthlyRelMatch[1]];
+            $('monthly-day-name').value = daysMap[monthlyRelMatch[2]];
+            taskText = taskText.replace(monthlyRelMatch[0], '').replace(/\s+/g, ' ').trim();
+        }
+
+        // 3. Monthly with specific date
+        const monthlyDateMatch = taskText.match(/매달\s*(\d{1,2})일(마다)?/);
+        if (monthlyDateMatch) {
+            finalIsRoutine = true; finalPeriod = 'monthly';
+            el.routinePeriod.value = 'monthly';
+            el.routinePeriod.dispatchEvent(new Event('change'));
+            el.monthlyType.value = 'date';
+            el.monthlyType.dispatchEvent(new Event('change'));
+            $('monthly-day-num').value = parseInt(monthlyDateMatch[1]);
+            taskText = taskText.replace(monthlyDateMatch[0], '').replace(/\s+/g, ' ').trim();
+        }
+
+        // 4. Daily with time
+        if (pr.timeMatched) {
+            const timeValMatch = pr.timeMatched.match(/(\d{1,2})시(\s*(\d{1,2})분)?/);
+            if (timeValMatch) {
+                const hh = timeValMatch[1].padStart(2, '0');
+                const mm = (timeValMatch[3] || '0').padStart(2, '0').slice(0, 2);
+                el.routineTime.value = `${hh}:${mm}`;
+                taskText = taskText.replace(pr.timeMatched, '').replace(/\s+/g, ' ').trim();
             }
         }
 
@@ -576,16 +640,42 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!taskText) taskText = fullText;
 
         const newOrder = state.tasks.length ? Math.max(...state.tasks.map(t => t.order || 0)) + 1 : 0;
+        
+        let recurrenceData = null;
+        if (finalIsRoutine) {
+            if (finalPeriod === 'daily') {
+                recurrenceData = { type: 'daily', time: el.routineTime.value };
+            } else if (finalPeriod === 'weekly') {
+                const days = Array.from(el.routineWeeklyOptions.querySelectorAll('input:checked')).map(i => parseInt(i.value));
+                recurrenceData = { type: 'weekly', days: days.length ? days : [new Date().getDay()] };
+            } else if (finalPeriod === 'monthly') {
+                if (el.monthlyType.value === 'date') {
+                    recurrenceData = { type: 'monthly', subType: 'date', day: parseInt($('monthly-day-num').value) };
+                } else {
+                    recurrenceData = { 
+                        type: 'monthly', 
+                        subType: 'relative', 
+                        weekNum: parseInt($('monthly-week-num').value), 
+                        dayName: parseInt($('monthly-day-name').value) 
+                    };
+                }
+            } else {
+                recurrenceData = finalPeriod;
+            }
+        }
+
         state.tasks.push({
             id: Date.now().toString(), text: taskText, categoryId: el.catSelect.value || 'cat_life',
             status: 'active', isRoutine: finalIsRoutine,
-            recurrence: finalIsRoutine ? finalPeriod : null,
+            recurrence: recurrenceData,
             dueDate: pr.targetDate ? pr.targetDate.toISOString() : null,
             order: newOrder, createdAt: new Date().toISOString()
         });
         save(); el.todoInput.value = ""; el.inputHL.innerHTML = ""; 
-        // Reset routine toggle and period if they were set by auto-detect
-        el.isRoutineCb.checked = false; el.routinePeriod.value = 'daily';
+        // Reset
+        el.isRoutineCb.checked = false; 
+        el.routinePeriod.value = 'daily';
+        el.routineWeeklyOptions.querySelectorAll('input').forEach(i => i.checked = false);
         el.isRoutineCb.dispatchEvent(new Event('change'));
         renderTasks(); updateBadges();
     }
@@ -648,14 +738,53 @@ document.addEventListener('DOMContentLoaded', () => {
                     status: 'completed', completedAt: now.toISOString(), isRoutineHistory: true
                 });
                 
-                // Update master routine date to next occurrence if this is the "official" completion
+                // Update master routine date to next occurrence
                 let next = t.dueDate ? new Date(t.dueDate) : new Date();
                 const advance = () => {
-                    if (t.recurrence === 'daily') next.setDate(next.getDate() + 1);
-                    else if (t.recurrence === 'every2days') next.setDate(next.getDate() + 2);
-                    else if (t.recurrence === 'every3days') next.setDate(next.getDate() + 3);
-                    else if (t.recurrence === 'weekly' || ['mon','tue','wed','thu','fri','sat','sun'].includes(t.recurrence)) next.setDate(next.getDate() + 7);
-                    else if (t.recurrence === 'monthly') next.setMonth(next.getMonth() + 1);
+                    const rect = t.recurrence;
+                    const type = typeof rect === 'string' ? rect : rect.type;
+
+                    if (type === 'daily') next.setDate(next.getDate() + 1);
+                    else if (type === 'every2days') next.setDate(next.getDate() + 2);
+                    else if (type === 'every3days') next.setDate(next.getDate() + 3);
+                    else if (type === 'weekly') {
+                        if (typeof rect === 'object' && rect.days) {
+                            // Find next day in the list
+                            let currentDay = next.getDay();
+                            let daysOffset = 1;
+                            while (!rect.days.includes((currentDay + daysOffset) % 7) && daysOffset < 8) {
+                                daysOffset++;
+                            }
+                            next.setDate(next.getDate() + daysOffset);
+                        } else {
+                            next.setDate(next.getDate() + 7);
+                        }
+                    } else if (['mon','tue','wed','thu','fri','sat','sun'].includes(type) || ['mon','tue','wed','thu','fri','sat','sun'].includes(rect)) {
+                        next.setDate(next.getDate() + 7);
+                    } else if (type === 'monthly') {
+                        if (typeof rect === 'object') {
+                            if (rect.subType === 'date') {
+                                next.setMonth(next.getMonth() + 1);
+                                next.setDate(rect.day);
+                            } else if (rect.subType === 'relative') {
+                                // Find next month's Nth weekday
+                                next.setMonth(next.getMonth() + 1);
+                                next.setDate(1);
+                                let firstDay = next.getDay();
+                                let diff = (rect.dayName - firstDay + 7) % 7;
+                                let targetDate = 1 + diff + (rect.weekNum - 1) * 7;
+                                
+                                // Handle 'last' week case
+                                let lastDayOfMonth = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+                                if (targetDate > lastDayOfMonth) {
+                                    if (rect.weekNum === 5) targetDate -= 7;
+                                }
+                                next.setDate(targetDate);
+                            }
+                        } else {
+                            next.setMonth(next.getMonth() + 1);
+                        }
+                    }
                 };
                 if (next <= now) advance();
                 t.dueDate = next.toISOString();
@@ -873,8 +1002,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let glowClass = '';
         if (t.dueDate && !isDone && !t.isRoutine) {
             const d = new Date(t.dueDate), now = new Date(); now.setHours(0,0,0,0);
-            const tmr = new Date(now); tmr.setDate(now.getDate() + 1);
-            if (d.toDateString() === now.toDateString() || d.toDateString() === tmr.toDateString()) {
+            if (d.toDateString() === now.toDateString()) {
                 glowClass = 'glow-red';
             }
         }
@@ -900,7 +1028,12 @@ document.addEventListener('DOMContentLoaded', () => {
             acts = `<div class="item-actions">${inner}</div>`;
         }
 
+        const cat = state.categories.find(c => c.id === t.categoryId);
+        const catColor = cat ? cat.color : '#8e8e93';
+        const catIndicator = `<div class="todo-cat-indicator" style="background:${catColor}"></div>`;
+
         return `<li class="todo-item ${isDone?'completed':''} ${glowClass}" data-id="${t.id}">
+            ${catIndicator}
             <div class="cb-wrap"><div class="cb ${cbStatus}" data-act="complete"><i class="fas fa-check"></i></div></div>
             <div class="todo-content">
                 <div class="todo-text" data-act="edit-text">${esc(t.text)}</div>
@@ -989,68 +1122,96 @@ document.addEventListener('DOMContentLoaded', () => {
         save(); renderSidebar();
     }
 
-    function parseDate(text) {
+    function parseDate(v) {
+        if (!v) return { targetDate: null, matched: null, timeMatched: null };
         const today = new Date(); today.setHours(0,0,0,0);
+        let t = null, m = null, timeStr = null;
+
+        // 1. Time Parsing: "12시 30분", "1시까지", "2시 15분까지"
+        const timeMatch = v.match(/(\d{1,2})시(\s*(\d{1,2})분)?(\s*까지)?/);
+        if (timeMatch) {
+            timeStr = timeMatch[0];
+        }
+
+        // 2. Date Parsing
         const days = ['일','월','화','수','목','금','토'];
-        let t = null, m = null;
-        
         const regs = [
-            /(오늘|내일|모레)(까지)?/, 
-            /((이번주|다음주)\s*([월화수목금토일])요일?)(까지)?/,
-            /((\d+)월\s*(\d+)일)(까지)?/,
-            /((\d{1,2})(\d{2}))(까지)?/,
-            /언제까지/
+            { r: /오늘/, d: 0 }, { r: /내일/, d: 1 }, { r: /모레/, d: 2 },
+            { r: /이번주\s*([월화수목금토일])요일/, w: 0 },
+            { r: /다음주\s*([월화수목금토일])요일/, w: 1 },
+            { r: /다다음주\s*([월화수목금토일])요일/, w: 2 },
+            { r: /(\d{1,2})월\s*(\d{1,2})일/, f: 'md' }
         ];
-        
-        for(let r of regs) {
-            const match = text.match(r);
+
+        for (let obj of regs) {
+            const match = v.match(obj.r);
             if (match) {
                 m = match[0];
-                const base = match[1];
-                
-                if (m === '언제까지') {
-                    t = null;
-                } else if (base === '오늘' || m === '오늘') t = new Date(today);
-                else if (base === '내일' || m === '내일') { t = new Date(today); t.setDate(today.getDate()+1); }
-                else if (base === '모레' || m === '모레') { t = new Date(today); t.setDate(today.getDate()+2); }
-                else if (match[3]) {
-                    const dayName = match[3];
-                    const diff = (days.indexOf(dayName) - today.getDay() + 7) % 7 || 7;
-                    t = new Date(today); t.setDate(today.getDate() + diff + (match[2]==='다음주'?7:0));
-                }
-                
-                if (m.includes('오늘')) t = new Date(today);
-                else if (m.includes('내일')) { t = new Date(today); t.setDate(today.getDate()+1); }
-                else if (m.includes('모레')) { t = new Date(today); t.setDate(today.getDate()+2); }
-                else if (m.includes('이번주') || m.includes('다음주')) {
-                    const dayMatch = m.match(/[월화수목금토일]/);
-                    if (dayMatch) {
-                        const diff = (days.indexOf(dayMatch[0]) - today.getDay() + 7) % 7 || 7;
-                        t = new Date(today); t.setDate(today.getDate() + diff + (m.includes('다음주')?7:0));
-                    }
-                } else {
-                    if (m.includes('월')) {
-                        const mdMatch = m.match(/(\d+)월\s*(\d+)일/);
-                        if (mdMatch) { t = new Date(today); t.setMonth(parseInt(mdMatch[1])-1); t.setDate(parseInt(mdMatch[2])); }
-                    } else {
-                        const numMatch = m.match(/(\d{1,2})(\d{2})/);
-                        if (numMatch) { t = new Date(today); t.setMonth(parseInt(numMatch[1])-1); t.setDate(parseInt(numMatch[2])); }
-                    }
+                if (obj.d !== undefined) { 
+                    t = new Date(today); 
+                    t.setDate(today.getDate() + obj.d); 
+                } else if (obj.w !== undefined) {
+                    const target = days.indexOf(match[1]);
+                    t = new Date(today);
+                    t.setDate(today.getDate() + (obj.w * 7) + (target - today.getDay()));
+                    // Adjust if "this week Tuesday" is already passed
+                    if (obj.w === 0 && t < today) t.setDate(t.getDate() + 7);
+                } else if (obj.f === 'md') {
+                    t = new Date(today); 
+                    t.setMonth(parseInt(match[1]) - 1); 
+                    t.setDate(parseInt(match[2]));
+                    if (t < today) t.setFullYear(today.getFullYear() + 1);
                 }
                 break;
             }
         }
-        return { targetDate: t, matched: m };
+        
+        // Apply time if found
+        if (t && timeStr) {
+            const tm = timeStr.match(/(\d{1,2})시(\s*(\d{1,2})분)?/);
+            if (tm) {
+                const hh = parseInt(tm[1]);
+                const mm = tm[3] ? parseInt(tm[3]) : 0;
+                t.setHours(hh, mm, 0, 0);
+            }
+        }
+
+        return { targetDate: t, matched: m, timeMatched: timeStr };
     }
 
     function handleHL() {
-        const v = el.todoInput.value; const pr = parseDate(v);
-        if (pr.matched) {
-            const i = v.indexOf(pr.matched);
-            const isUrgent = pr.matched.includes('내일') || pr.matched.includes('오늘');
-            const cls = isUrgent ? 'highlight-bg-red' : 'highlight-bg';
-            el.inputHL.innerHTML = esc(v.substring(0, i)) + `<span class="${cls}">${esc(pr.matched)}</span>` + esc(v.substring(i+pr.matched.length));
-        } else el.inputHL.innerHTML = esc(v);
+        const v = el.todoInput.value; 
+        const pr = parseDate(v);
+        
+        const routineMatch = v.match(/(매일|이틀마다|3일마다|매주\s*[월화수목금토일]요일|매달\s*\d{1,2}일|매달\s*[첫둘셋넷마지막]+주\s*[월화수목금토일]요일)(마다)?/);
+        
+        let toHighlight = [];
+        if (pr.matched) toHighlight.push({ text: pr.matched, type: 'date' });
+        if (pr.timeMatched) toHighlight.push({ text: pr.timeMatched, type: 'time' });
+        if (routineMatch) toHighlight.push({ text: routineMatch[0], type: 'routine' });
+
+        // Remove duplicates and overlaps
+        toHighlight = toHighlight.filter((item, index) => {
+            return toHighlight.findIndex(h => h.text === item.text) === index;
+        });
+
+        // Sort by position in string
+        const highlightsWithPos = toHighlight.map(h => ({ ...h, pos: v.indexOf(h.text) }))
+                                             .filter(h => h.pos !== -1)
+                                             .sort((a,b) => a.pos - b.pos);
+
+        let lastIdx = 0;
+        let finalHtml = '';
+        highlightsWithPos.forEach(h => {
+            if (h.pos < lastIdx) return; // Skip overlapping
+            finalHtml += esc(v.substring(lastIdx, h.pos));
+            let cls = 'highlight-bg';
+            if (h.type === 'date' && (h.text.includes('오늘') || h.text.includes('내일'))) cls = 'highlight-bg-red';
+            finalHtml += `<span class="${cls}">${esc(h.text)}</span>`;
+            lastIdx = h.pos + h.text.length;
+        });
+        finalHtml += esc(v.substring(lastIdx));
+        el.inputHL.innerHTML = finalHtml || esc(v);
     }
 
     function renderHabitGrid() {
@@ -1076,14 +1237,11 @@ document.addEventListener('DOMContentLoaded', () => {
             days.push(d);
         }
         
-        // --- 리마인더 섹션 ---
+        // --- 리마인더 섹션 (새 컨테이너 sr-reminders-list 사용) ---
+        const reminderList = $('sr-reminders-list');
+        if (reminderList) reminderList.innerHTML = '';
         const reminders = state.tasks.filter(t => t.status === 'active' && !t.isRoutine && !t.isRoutineHistory);
-        if (reminders.length > 0) {
-            const separator = document.createElement('div');
-            separator.className = 'hg-reminder-separator';
-            separator.innerHTML = `<span><i class="fas fa-bell"></i> 리마인더</span>`;
-            el.habitGrid.appendChild(separator);
-
+        if (reminders.length > 0 && reminderList) {
             reminders.forEach(r => {
                 let dueMeta = '';
                 if (r.dueDate) {
@@ -1104,8 +1262,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="hg-reminder-check" data-act="complete" data-rid="${r.id}"><i class="fas fa-check"></i></div>
                     <div class="hg-reminder-label">${delBtn2}<span class="hg-reminder-text">${esc(r.text)}</span>${dueMeta}</div>
                 `;
-                el.habitGrid.appendChild(row);
+                reminderList.appendChild(row);
             });
+        } else if (reminderList) {
+            reminderList.innerHTML = `<div class="empty-state" style="padding:20px 0;"><p style="font-size:0.8rem;">리마인더가 없습니다.</p></div>`;
         }
 
         // --- 요일 헤더 (리마인더 아래로 이동) ---
@@ -1119,68 +1279,137 @@ document.addEventListener('DOMContentLoaded', () => {
         headerRow.innerHTML = newH + '</div>';
         el.habitGrid.appendChild(headerRow.firstChild);
 
-        // --- 루틴 섹션 ---
-        const routines = getPool().filter(r => r.recurrence !== 'monthly');
-        routines.forEach(r => {
-            const isWeekly = r.recurrence === 'weekly';
-            const specificDayNum = ['sun','mon','tue','wed','thu','fri','sat'].indexOf(r.recurrence);
-            const delBtn = state.hgEditMode ? `<i class="fas fa-minus-circle hg-del-btn" data-rid="${r.id}"></i>` : '';
+        // --- 루틴 섹션 (그룹화) ---
+        const allRoutines = getPool().filter(r => {
+            const rt = typeof r.recurrence === 'string' ? r.recurrence : (r.recurrence?.type || '');
+            return rt !== '';
+        });
+
+        const dailyGroup = allRoutines.filter(r => {
+            const type = typeof r.recurrence === 'string' ? r.recurrence : r.recurrence.type;
+            const hasDays = typeof r.recurrence === 'object' && r.recurrence.days?.length > 0;
+            return !['weekly', 'monthly'].includes(type) || hasDays;
+        });
+        const advancedGroup = allRoutines.filter(r => {
+            const type = typeof r.recurrence === 'string' ? r.recurrence : r.recurrence.type;
+            const hasDays = typeof r.recurrence === 'object' && r.recurrence.days?.length > 0;
+            return (['weekly', 'monthly'].includes(type)) && !hasDays;
+        });
+
+        const renderRoutRow = (r, isAdvanced = false) => {
+            const rect = r.recurrence;
+            const type = typeof rect === 'string' ? rect : (rect?.type || '');
+            const isWeekly = type === 'weekly';
+            const isMonthly = type === 'monthly';
             
             let typeLabel = '';
             if (isWeekly) typeLabel = '주간';
-            else if (r.recurrence === 'every2days') typeLabel = '2일';
-            else if (r.recurrence === 'every3days') typeLabel = '3일';
-            else if (specificDayNum > -1) typeLabel = dayNames[(specificDayNum+6)%7];
+            else if (isMonthly) typeLabel = '월간';
+            else if (type === 'every2days') typeLabel = '2일';
+            else if (type === 'every3days') typeLabel = '3일';
+            else if (['mon','tue','wed','thu','fri','sat','sun'].includes(type)) typeLabel = dayNames[['sun','mon','tue','wed','thu','fri','sat'].indexOf(type)];
 
             const typeBadge = typeLabel ? `<span class="hg-type-badge">${typeLabel}</span>` : '';
-            let rowBody = `<div class="hg-row"><div class="hg-label">${delBtn}${typeBadge}${esc(r.text)}</div>`;
-            
-            const weekCompletion = isWeekly && state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && days.some(d => new Date(t.completedAt).toDateString() === d.toDateString()));
+            const delBtn = state.hgEditMode ? `<i class="fas fa-minus-circle hg-del-btn" data-rid="${r.id}"></i>` : '';
 
-            days.forEach(day => {
-                let cellDisabled = false;
-                // Specific Day logic
-                if (specificDayNum > -1 && day.getDay() !== specificDayNum) cellDisabled = true;
-                
-                const dayDone = state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === day.toDateString());
-                const done = isWeekly ? weekCompletion : dayDone;
-                
-                if (cellDisabled) {
-                    rowBody += `<div class="hg-cell disabled" style="opacity:0.2; pointer-events:none;"></div>`;
-                } else {
-                    rowBody += `<div class="hg-cell ${done?'done':''}" data-rid="${r.id}" data-day="${day.toISOString()}" data-weekly="${isWeekly}">${done?'<i class="fas fa-check"></i>':''}</div>`;
-                }
-            });
-            const rowEl = document.createElement('div');
-            rowEl.innerHTML = rowBody + '</div>';
-            el.habitGrid.appendChild(rowEl.firstChild);
-        });
+            if (isAdvanced) {
+                // Pill style centered
+                const isDone = state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt) >= days[0] && new Date(t.completedAt) <= days[6]);
+                const row = document.createElement('div');
+                row.className = 'hg-pill-row';
+                row.innerHTML = `
+                    <div class="hg-label">${delBtn}${typeBadge}${esc(r.text)}</div>
+                    <div class="hg-pill-container">
+                        <div class="hg-cell pill ${isDone?'done':''}" data-rid="${r.id}" data-day="${days[3].toISOString()}" data-weekly="true">
+                            ${isDone?'<i class="fas fa-check"></i>':''}
+                        </div>
+                    </div>
+                `;
+                return row;
+            } else {
+                // Standard 7-day row
+                const row = document.createElement('div');
+                row.className = 'hg-row';
+                let rowBody = `<div class="hg-label">${delBtn}${typeBadge}${esc(r.text)}</div>`;
+                days.forEach(day => {
+                    let cellDisabled = false;
+                    if (['sun','mon','tue','wed','thu','fri','sat'].includes(type)) {
+                        if (day.getDay() !== ['sun','mon','tue','wed','thu','fri','sat'].indexOf(type)) cellDisabled = true;
+                    } else if (isWeekly && typeof rect === 'object' && rect.days) {
+                        if (!rect.days.includes(day.getDay())) cellDisabled = true;
+                    }
+                    const done = state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === day.toDateString());
+                    if (cellDisabled) rowBody += `<div class="hg-cell disabled" style="opacity:0.2; pointer-events:none;"></div>`;
+                    else rowBody += `<div class="hg-cell ${done?'done':''}" data-rid="${r.id}" data-day="${day.toISOString()}">${done?'<i class="fas fa-check"></i>':''}</div>`;
+                });
+                row.innerHTML = rowBody;
+                return row;
+            }
+        };
 
-        // Toggle All Per Day
+        if (dailyGroup.length) {
+            dailyGroup.forEach(r => el.habitGrid.appendChild(renderRoutRow(r)));
+        }
+        if (advancedGroup.length) {
+            const sep = document.createElement('div'); sep.className = 'hg-separator';
+            sep.innerHTML = `<span class="hg-separator-label">주간/월간 루틴</span>`;
+            el.habitGrid.appendChild(sep);
+            advancedGroup.forEach(r => el.habitGrid.appendChild(renderRoutRow(r, true)));
+        }
+
+        // --- Weekly Archiving Logic ---
+        const weekKey = startOfThisWeek.toISOString();
+        const prevWeekStart = new Date(startOfThisWeek); prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+        const prevWeekKey = prevWeekStart.toISOString();
+
+        if (!state.victoryLog.some(l => l.type === 'week-archive' && l.weekKey === prevWeekKey)) {
+            // Archive the PREVIOUS week if it hasn't been archived yet
+            const prevRoutines = state.tasks.filter(t => t.isRoutineHistory && t.status === 'completed' && new Date(t.completedAt) >= prevWeekStart && new Date(t.completedAt) < startOfThisWeek);
+            if (prevRoutines.length > 0) {
+                state.victoryLog.push({
+                    id: Date.now(),
+                    type: 'week-archive',
+                    title: `${prevWeekStart.getMonth()+1}월 ${Math.ceil(prevWeekStart.getDate()/7)}주차 기록`,
+                    date: new Date().toISOString(),
+                    weekKey: prevWeekKey,
+                    count: prevRoutines.length,
+                    badge: 'WEEKLY ARCHIVE'
+                });
+                save();
+            }
+        }
+
+        // Toggle All Per Day (Excluding Weekly and Monthly as requested)
         el.habitGrid.querySelectorAll('.hg-cell-hdr').forEach(hdr => {
             hdr.onclick = () => {
+                hdr.classList.add('active-click');
+                setTimeout(() => hdr.classList.remove('active-click'), 200);
+                
                 const dayIdx = parseInt(hdr.dataset.dayIdx);
                 const day = days[dayIdx];
                 const ds = day.toDateString();
                 
-                // Find all enabled cells for this day
                 const cells = Array.from(el.habitGrid.querySelectorAll(`.hg-cell[data-day]`))
-                                   .filter(c => new Date(c.dataset.day).toDateString() === ds);
+                                   .filter(c => {
+                                       if (new Date(c.dataset.day).toDateString() !== ds) return false;
+                                       const rid = c.dataset.rid;
+                                       const t = state.tasks.find(x => x.id == rid);
+                                       if (!t) return false;
+                                       const rect = t.recurrence;
+                                       const type = typeof rect === 'string' ? rect : (rect?.type || '');
+                                       return type !== 'weekly' && type !== 'monthly';
+                                   });
                 
                 const allDone = cells.length > 0 && cells.every(c => c.classList.contains('done'));
                 
                 cells.forEach(c => {
                     const rid = c.dataset.rid;
-                    const isWeekly = c.dataset.weekly === 'true';
                     const ex = state.tasks.find(t => t.originalRoutineId === rid && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds);
-                    
                     if (allDone) {
-                        // Uncheck all
                         if (ex) state.tasks = state.tasks.filter(x => x.id !== ex.id);
                     } else {
-                        // Check empty ones
                         if (!ex) {
-                            const rt = state.tasks.find(x => x.id === rid);
+                            const rt = state.tasks.find(x => x.id == rid);
                             state.tasks.push({ ...rt, id: Date.now()+'h'+Math.random(), originalRoutineId: rid, status: 'completed', completedAt: day.toISOString(), isRoutineHistory: true });
                         }
                     }
@@ -1189,8 +1418,8 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
 
-        if (routines.length > 0) {
-            const allChecked = routines.every(r => days.every(d => state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === d.toDateString())));
+        if (allRoutines.length > 0) {
+            const allChecked = allRoutines.every(r => days.every(d => state.tasks.some(t => t.originalRoutineId == r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === d.toDateString())));
             const weekKey = startOfThisWeek.toISOString();
             if (allChecked && !state.victoryLog.some(l => l.weekKey === weekKey)) {
                 state.victoryLog.push({
@@ -1213,24 +1442,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isWeekly) {
                     const weekStarts = new Date(days[0]); weekStarts.setHours(0,0,0,0);
                     const weekEnds = new Date(days[6]); weekEnds.setHours(23,59,59,999);
-                    
-                    const completionsInWeek = state.tasks.filter(t => t.originalRoutineId === rid && t.status === 'completed' && new Date(t.completedAt) >= weekStarts && new Date(t.completedAt) <= weekEnds);
-                    
+                    const completionsInWeek = state.tasks.filter(t => t.originalRoutineId == rid && t.status === 'completed' && new Date(t.completedAt) >= weekStarts && new Date(t.completedAt) <= weekEnds);
                     if (completionsInWeek.length > 0) {
                         state.tasks = state.tasks.filter(t => !completionsInWeek.includes(t));
                     } else {
-                        const rt = state.tasks.find(x => x.id === rid);
-                        state.tasks.push({ ...rt, id: Date.now()+'h', originalRoutineId: rid, status: 'completed', completedAt: new Date(cell.dataset.day).toISOString(), isRoutineHistory: true });
+                        const rt = state.tasks.find(x => x.id == rid);
+                        if (rt) state.tasks.push({ ...rt, id: Date.now()+'h', originalRoutineId: rid, status: 'completed', completedAt: new Date(cell.dataset.day).toISOString(), isRoutineHistory: true });
                     }
                 } else {
-                    const ex = state.tasks.find(t => t.originalRoutineId === rid && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds);
-                    if(ex) state.tasks = state.tasks.filter(x => x.id !== ex.id);
+                    const ex = state.tasks.find(t => t.originalRoutineId == rid && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds);
+                    if(ex) state.tasks = state.tasks.filter(x => x.id != ex.id);
                     else {
-                        const rt = state.tasks.find(x => x.id === rid);
-                        state.tasks.push({ ...rt, id: Date.now()+'h', originalRoutineId: rid, status: 'completed', completedAt: new Date(cell.dataset.day).toISOString(), isRoutineHistory: true });
+                        const rt = state.tasks.find(x => x.id == rid);
+                        if (rt) state.tasks.push({ ...rt, id: Date.now()+'h', originalRoutineId: rid, status: 'completed', completedAt: new Date(cell.dataset.day).toISOString(), isRoutineHistory: true });
                     }
                 }
-                save(); renderTasks();
+                save(); renderHabitGrid(); renderTasks();
             };
         });
 
@@ -1238,39 +1465,33 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.onclick = (e) => {
                 e.stopPropagation();
                 const rid = btn.dataset.rid;
-                openConfirm('이 루틴을 완전히 삭제할까요?', () => {
-                    state.tasks = state.tasks.filter(t => t.id !== rid && t.originalRoutineId !== rid);
-                    save(); renderHabitGrid(); renderTasks();
-                });
+                const isReminder = btn.dataset.isReminder === 'true';
+                if (isReminder) {
+                    openConfirm('이 리마인더를 삭제할까요?', () => {
+                        state.tasks = state.tasks.filter(t => t.id != rid);
+                        save(); renderHabitGrid(); renderTasks();
+                    });
+                } else {
+                    openConfirm('이 루틴을 완전히 삭제할까요?', () => {
+                        state.tasks = state.tasks.filter(t => t.id != rid && t.originalRoutineId != rid);
+                        save(); renderHabitGrid(); renderTasks();
+                    });
+                }
             };
         });
 
-        // --- 리마인더 섹션 클릭/삭제 핸들러 ---
-
-            // click handler for reminder check
-            el.habitGrid.querySelectorAll('.hg-reminder-check').forEach(btn => {
-                btn.onclick = () => {
-                    const rid = btn.dataset.rid;
-                    const t = state.tasks.find(x => x.id === rid);
-                    if (t) {
-                        t.status = 'completed';
-                        t.completedAt = new Date().toISOString();
-                        save(); renderTasks();
-                    }
-                };
-            });
-
-            // delete handler for reminder delete
-            el.habitGrid.querySelectorAll('.hg-del-btn[data-is-reminder]').forEach(btn => {
-                btn.onclick = (e) => {
-                    e.stopPropagation();
-                    const rid = btn.dataset.rid;
-                    openConfirm('이 리마인더를 삭제할까요?', () => {
-                        state.tasks = state.tasks.filter(t => t.id !== rid);
-                        save(); renderHabitGrid(); renderTasks();
-                    });
-                };
-            });
+        // --- 리마인더 섹션 클릭 핸들러 (부모 컨테이너 수정) ---
+        (reminderList || document).querySelectorAll('.hg-reminder-check').forEach(btn => {
+            btn.onclick = () => {
+                const rid = btn.dataset.rid;
+                const t = state.tasks.find(x => x.id == rid);
+                if (t) {
+                    t.status = 'completed';
+                    t.completedAt = new Date().toISOString();
+                    save(); renderHabitGrid(); renderTasks(); renderChart();
+                }
+            };
+        });
     }
 
     function renderVictoryLog() {
@@ -1287,14 +1508,23 @@ document.addEventListener('DOMContentLoaded', () => {
         state.victoryLog.slice().reverse().forEach(log => {
             const d = new Date(log.date);
             const dateStr = d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+            
+            let icon = 'fa-crown';
+            let color = 'var(--purple)';
+            if (log.type === 'week-archive') {
+                icon = 'fa-calendar-check';
+                color = 'var(--blue)';
+            }
+
             el.victoryList.innerHTML += `
-                <div class="victory-entry">
-                    <div class="v-icon"><i class="fas fa-crown"></i></div>
+                <div class="victory-entry" style="border-left-color:${color}">
+                    <div class="v-icon" style="background:${color}1a; color:${color}"><i class="fas ${icon}"></i></div>
                     <div class="v-info">
                         <div class="v-title">${esc(log.title)}</div>
                         <div class="v-date">${dateStr}</div>
+                        ${log.count ? `<div style="font-size:0.75rem; color:var(--text2); margin-top:4px;"><i class="fas fa-check-circle"></i> 총 ${log.count}개의 루틴 달성</div>` : ''}
                     </div>
-                    <div class="v-badge">${esc(log.badge)}</div>
+                    <div class="v-badge" style="background:${color}">${esc(log.badge)}</div>
                 </div>
             `;
         });
@@ -1318,7 +1548,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const days = []; for(let i=0; i<7; i++){ const d = new Date(startOfThisWeek); d.setDate(startOfThisWeek.getDate() + i); days.push(d); }
         
-        const pool = state.tasks.filter(t => t.status === 'active' && t.isRoutine && !t.isRoutineHistory && t.recurrence !== 'monthly');
+        const pool = state.tasks.filter(t => {
+            if (t.status !== 'active' || !t.isRoutine || t.isRoutineHistory) return false;
+            const rt = typeof t.recurrence === 'string' ? t.recurrence : (t.recurrence?.type || '');
+            return rt !== 'monthly';
+        });
         // 리마인더도 퍼센트 계산에 포함 (완료 시 카운트, 삭제된 건 제외)
         const reminderPool = state.tasks.filter(t => !t.isRoutine && !t.isRoutineHistory && t.status !== 'deleted');
         const reminderDoneCount = reminderPool.filter(t => t.status === 'completed').length;
@@ -1349,15 +1583,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if(state.reward) el.rewardChip.innerHTML = `<i class="fas fa-gift"></i> ${esc(state.reward)}`;
         }
 
-        const pad = { l:30, r:10, t:20, b:35 }, gw = W-pad.l-pad.r, gh = H-pad.t-pad.b;
+        const pad = { l:30, r:10, t:10, b:25 }, gw = W-pad.l-pad.r, gh = H-pad.t-pad.b;
         ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
+        if (state.theme === 'dark') ctx.strokeStyle = '#333';
         for(let i=0; i<=4; i++) {
             const y = pad.t + gh - (gh * i/4);
             ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
         }
         
         const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + gh);
-        grad.addColorStop(0, 'rgba(0, 122, 255, 0.2)'); grad.addColorStop(1, 'rgba(0, 122, 255, 0)');
+        grad.addColorStop(0, 'rgba(0, 122, 255, 0.15)'); grad.addColorStop(1, 'rgba(0, 122, 255, 0)');
         ctx.beginPath();
         rates.forEach((r, i) => {
             const x = pad.l + (gw * i/6), y = pad.t + gh - (gh * r/100);
@@ -1366,7 +1601,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.lineTo(pad.l+gw, pad.t+gh); ctx.lineTo(pad.l, pad.t+gh);
         ctx.fillStyle = grad; ctx.fill();
 
-        ctx.beginPath(); ctx.strokeStyle = '#007aff'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.beginPath(); ctx.strokeStyle = '#007aff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
         rates.forEach((r, i) => {
             const x = pad.l + (gw * i/6), y = pad.t + gh - (gh * r/100);
             if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
@@ -1375,17 +1610,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         rates.forEach((r, i) => {
             const x = pad.l + (gw * i/6), y = pad.t + gh - (gh * r/100);
-            ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2);
             ctx.fillStyle = 'white'; ctx.fill();
-            ctx.strokeStyle = '#007aff'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.strokeStyle = '#007aff'; ctx.lineWidth = 1.5; ctx.stroke();
         });
 
         ctx.fillStyle = state.theme === 'dark' ? '#a1a1a6' : '#8e8e93';
-        ctx.font = '500 11px Inter';
+        ctx.font = '600 10px Inter';
         ctx.textAlign = 'center';
         ['월','화','수','목','금','토','일'].forEach((label, i) => {
             const x = pad.l + (gw * i/6);
-            ctx.fillText(label, x, H - 8);
+            ctx.fillText(label, x, H - 6);
         });
     }
 

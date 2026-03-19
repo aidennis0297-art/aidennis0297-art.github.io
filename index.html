@@ -171,23 +171,33 @@
                     </div>
 
                     <div class="sr-card chart-card">
-                        <div class="sr-card-header">
-                            <i class="fas fa-chart-line"></i> 주간 달성 리포트
+                        <div class="sr-card-header collapsible-card" data-target="chart-section">
+                            <div><i class="fas fa-chart-line"></i> 주간 달성 리포트</div>
+                            <i class="fas fa-chevron-down toggle-icon"></i>
                         </div>
-                        <div class="chart-container">
-                            <canvas id="achievement-chart"></canvas>
-                        </div>
-                        <div class="chart-footer">
-                            <div class="today-rate-chip" id="today-rate">이번 주 평균 달성: 0%</div>
-                            <div class="reward-chip hidden" id="reward-display-chip"><i class="fas fa-gift"></i> </div>
+                        <div id="chart-section">
+                            <div class="chart-container">
+                                <canvas id="achievement-chart"></canvas>
+                            </div>
+                            <div class="chart-footer">
+                                <div class="today-rate-chip" id="today-rate">이번 주 평균 달성: 0%</div>
+                                <div class="reward-chip hidden" id="reward-display-chip"><i class="fas fa-gift"></i> </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="sr-card">
-                        <div class="sr-card-header hg-card-header">
-                            <div><i class="fas fa-calendar-check"></i> <span id="hg-week-label">데일리 체크포인트</span></div>
+                    <div class="sr-split-view">
+                        <div class="sr-card">
+                            <div class="sr-card-header"><i class="fas fa-bell"></i> 리마인더</div>
+                            <div id="sr-reminders-list" class="sr-reminders-list"></div>
                         </div>
-                        <div class="habit-grid" id="habit-grid"></div>
+
+                        <div class="sr-card">
+                            <div class="sr-card-header hg-card-header">
+                                <div><i class="fas fa-calendar-check"></i> <span id="hg-week-label">체크포인트</span></div>
+                            </div>
+                            <div class="habit-grid" id="habit-grid"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -231,11 +241,62 @@
                             <span class="toggle-icon"><i class="fas fa-bell"></i></span>
                             <span class="toggle-text">리마인더</span>
                         </label>
-                        <select id="routine-period" class="hidden">
-                            <option value="daily">매일</option>
-                            <option value="weekly">매주</option>
-                            <option value="monthly">매월</option>
-                        </select>
+                        <div id="routine-period-wrapper" class="hidden">
+                            <select id="routine-period">
+                                <option value="daily">매일</option>
+                                <option value="weekly">매주</option>
+                                <option value="monthly">매월</option>
+                            </select>
+                            
+                            <!-- Advanced Weekly Options -->
+                            <div id="routine-weekly-options" class="hidden advanced-recurrence-options">
+                                <div class="day-picker">
+                                    <label><input type="checkbox" value="1">월</label>
+                                    <label><input type="checkbox" value="2">화</label>
+                                    <label><input type="checkbox" value="3">수</label>
+                                    <label><input type="checkbox" value="4">목</label>
+                                    <label><input type="checkbox" value="5">금</label>
+                                    <label><input type="checkbox" value="6">토</label>
+                                    <label><input type="checkbox" value="0">일</label>
+                                </div>
+                            </div>
+
+                            <!-- Advanced Monthly Options -->
+                            <div id="routine-monthly-options" class="hidden advanced-recurrence-options">
+                                <div class="monthly-picker">
+                                    <select id="monthly-type">
+                                        <option value="date">매달 날짜</option>
+                                        <option value="relative">매달 요일</option>
+                                    </select>
+                                    <div id="monthly-date-select">
+                                        <input type="number" id="monthly-day-num" min="1" max="31" value="1">일
+                                    </div>
+                                    <div id="monthly-relative-select" class="hidden">
+                                        <select id="monthly-week-num">
+                                            <option value="1">첫째주</option>
+                                            <option value="2">둘째주</option>
+                                            <option value="3">셋째주</option>
+                                            <option value="4">넷째주</option>
+                                            <option value="5">마지막주</option>
+                                        </select>
+                                        <select id="monthly-day-name">
+                                            <option value="1">월요일</option>
+                                            <option value="2">화요일</option>
+                                            <option value="3">수요일</option>
+                                            <option value="4">목요일</option>
+                                            <option value="5">금요일</option>
+                                            <option value="6">토요일</option>
+                                            <option value="0">일요일</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Daily (Time) Options -->
+                            <div id="routine-daily-options" class="hidden advanced-recurrence-options">
+                                <input type="time" id="routine-time" value="09:00">
+                            </div>
+                        </div>
                         <div class="category-select-wrapper">
                             <i class="fas fa-folder"></i>
                             <select id="task-category-select"></select>
