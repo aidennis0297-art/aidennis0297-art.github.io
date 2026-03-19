@@ -16,7 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
         reward: '',
         rewardTarget: '100',
         editMode: false,
-        theme: 'light'
+        theme: 'light',
+        calendarData: {},
+        isOverdoseMode: false,
+        isEEEnabled: false
     };
 
     const $ = id => document.getElementById(id);
@@ -189,7 +192,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 victoryLog: state.victoryLog || [],
                 reward: state.reward || '',
                 rewardTarget: state.rewardTarget || '100',
-                theme: state.theme || 'light'
+                theme: state.theme || 'light',
+                calendarData: state.calendarData || {},
+                isOverdoseMode: state.isOverdoseMode || false,
+                isEEEnabled: state.isEEEnabled || false
             });
         }, 800);
     };
@@ -210,7 +216,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         reward: data.reward || '',
                         rewardTarget: data.rewardTarget || '100',
                         editMode: false,
-                        theme: data.theme || 'light'
+                        theme: data.theme || 'light',
+                        calendarData: data.calendarData || {},
+                        isOverdoseMode: data.isOverdoseMode || false,
+                        isEEEnabled: data.isEEEnabled || false
                     };
                 }
                 
@@ -245,7 +254,18 @@ document.addEventListener('DOMContentLoaded', () => {
         
         setupEvents();
         renderSidebar();
+        updateEEUI();
         setView(state.currentView);
+    }
+    
+    function updateEEUI() {
+        const btn = $('ee-enable-btn');
+        if (btn) {
+            btn.innerHTML = state.isEEEnabled ? '<i class="fas fa-unlock"></i> 이스터에그 활성됨' : '<i class="fas fa-lock"></i> 이스터에그 해제';
+            btn.classList.toggle('primary', state.isEEEnabled);
+        }
+        const navItem = document.querySelector('.nav-item[data-view="calendar"]');
+        if (navItem) navItem.classList.toggle('hidden', !state.isEEEnabled);
     }
     
     function updateThemeIcon() {
@@ -325,7 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Header Rename (Title Click)
         el.viewTitle.onclick = (e) => {
             const v = state.currentView;
-            if (['super-routine','history','trash'].includes(v)) return;
+            if (['history','trash','settings'].includes(v)) return;
             const cat = state.categories.find(c => c.id === v);
             if (!cat) return;
             
@@ -492,6 +512,16 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         }
 
+        // Easter Egg Toggle in Settings
+        const eeBtn = $('ee-enable-btn');
+        if (eeBtn) {
+            eeBtn.onclick = () => {
+                state.isEEEnabled = !state.isEEEnabled;
+                save();
+                updateEEUI();
+            };
+        }
+
         // Global list delegation
         el.todoList.onclick = handleListClick;
     }
@@ -543,13 +573,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const isSR = v === 'super-routine';
         if ($('sr-extras')) $('sr-extras').classList.toggle('hidden', !isSR);
         
-        const isSettings = v === 'settings', isVictory = v === 'victory-log';
+        const isSettings = v === 'settings', isVictory = v === 'victory-log', isCalendar = v === 'calendar';
         if (el.settingsView) el.settingsView.classList.toggle('hidden', !isSettings);
         if (el.victoryView) el.victoryView.classList.toggle('hidden', !isVictory);
         
-        el.todoList.classList.toggle('hidden', isSettings || isVictory);
+        const calView = $('calendar-view');
+        if (calView) {
+            calView.classList.toggle('hidden', !isCalendar);
+            if (isCalendar) initCalendarView();
+            else if (window.stopCalendar) window.stopCalendar();
+        }
+
+        el.todoList.classList.toggle('hidden', isSettings || isVictory || isCalendar);
         
-        const isUserCat = !['all', 'super-routine', 'history', 'victory-log', 'trash', 'settings'].includes(v);
+        const isUserCat = !['all', 'super-routine', 'history', 'victory-log', 'trash', 'settings', 'calendar'].includes(v);
         $('edit-view-actions').classList.toggle('hidden', !isUserCat);
         
         // Month/Week Display for Super Routine
@@ -564,11 +601,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 'history': '완료 리마인더', 
                 'victory-log': '🏆 성공의 기록', 
                 'trash': '휴지통', 
-                'settings': '설정' 
+                'settings': '설정',
+                'calendar': '📅 캘린더'
             }[v];
         }
         
-        el.inputWrapper.style.display = ['history','trash','settings','victory-log'].includes(v) ? 'none' : 'block';
+        el.inputWrapper.style.display = ['history','trash','settings','victory-log', 'calendar'].includes(v) ? 'none' : 'block';
+        const mainHeader = document.querySelector('.main-header');
+        if (mainHeader) mainHeader.style.display = (v === 'calendar') ? 'none' : 'flex';
         
         updateDropdown(); renderTasks();
         if (isVictory) renderVictoryLog();
@@ -1496,8 +1536,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderVictoryLog() {
         if (!el.victoryView) return;
-        $('perfect-weeks-count').textContent = state.victoryLog.filter(l => l.type === 'perfect-week').length;
-        $('total-routines-checked').textContent = state.tasks.filter(t => t.isRoutineHistory && t.status === 'completed').length;
+        const perfEl = $('perfect-weeks-count'), totalEl = $('total-routines-checked');
+        if (perfEl) perfEl.textContent = state.victoryLog.filter(l => l.type === 'perfect-week').length;
+        if (totalEl) {
+            totalEl.textContent = state.tasks.filter(t => t.isRoutineHistory && t.status === 'completed').length;
+        }
 
         el.victoryList.innerHTML = '';
         if (!state.victoryLog.length) {
@@ -1623,6 +1666,251 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.fillText(label, x, H - 6);
         });
     }
+
+    // --- CALENDAR VIEW: Cute & Glitchy Routine Calendar ---
+    let calInitialized = false;
+    let calParticles = [];
+    let calFxActive = true;
+    let calIntervals = { bubble: null, breathe: null };
+    let calAnimReq = { particles: null };
+    let calCurrentDate = new Date();
+    // Use state-based data
+    const getCalData = () => state.calendarData || {};
+    const setCalData = (data) => { state.calendarData = data; save(); };
+    const setCalIsDarkMode = (val) => { state.isOverdoseMode = val; save(); };
+
+    const CAL_DOT_MAPS = {
+        empty: [],
+        spade: ["....#....", "...###...", "..#####..", ".#######.", "#########", "#########", "....#....", "...###...", "..#####.."],
+        o: ["...###...", ".#######.", ".##...##.", ".##...##.", "##.....##", ".##...##.", ".##...##.", ".#######.", "...###..."],
+        x: ["##.....##", "###...###", ".###.###.", "..#####..", "...###...", "..#####..", ".###.###.", "###...###", "##.....##"],
+        heart: [".###.###.", "#########", "#########", "#########", ".#######.", "..#####..", "...###...", "....#....", "........."],
+        club: ["...###...", "..#####..", "...###...", ".#######.", "#########", ".#######.", "....#....", "...###...", "..#####.."],
+        diamond: ["....#....", "...###...", "..#####..", ".#######.", "#########", ".#######.", "..#####..", "...###...", "....#...."]
+    };
+    const CAL_SYMBOL_ORDER = ['empty', 'spade', 'o', 'x', 'heart', 'club', 'diamond'];
+    const CAL_FLASH_TEXTS = ['', 'KAWAII!', 'POP!', 'GLITCH!', 'CRASH!', 'OVERDOSE!', 'ANGEL!', 'WARNING!', 'DANGER!', 'MELTDOWN!'];
+    const CAL_BUBBLE_PHRASES = ["I AM INTERNET ANGEL", "OVERDOSE...", "Need more likes!", "Glitch in the matrix", "Do you love me?", "ERROR 404: Sleep", "Y2K FOREVER", "Too much neon!", "Tap me senpai", "MIND = BLOWN", "✝ BLESS ✝", "Pill time?", "Kawaii overload...", "System hacked.", "Notice me!", "10101010", "Dopamine hit!", "Loading happiness...", "Who designed this?", "Praise the Angel"];
+
+    function initCalendarView() {
+        if (calInitialized) { startCalAnimations(); return; }
+        calInitialized = true;
+
+        const view = $('calendar-view');
+        const canvas = $('ee-bgCanvas'), ctx = canvas.getContext('2d');
+        const grid = $('ee-calendarGrid'), monthDisplay = $('ee-monthDisplay');
+        const fxBtn = $('ee-fxBtn'), breatheBtn = $('ee-breatheBtn'), blinkBtn = $('ee-blinkBtn'), modeBtn = $('ee-modeToggle');
+        
+        const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+        window.addEventListener('resize', resize); resize();
+
+        function createSVG(mapKey) {
+            const map = CAL_DOT_MAPS[mapKey]; if (!map || !map.length) return '';
+            const w = map[0].length, h = map.length;
+            let r = '';
+            for (let y=0; y<h; y++) {
+                for (let x=0; x<w; x++) { if (map[y][x] === '#') r += `<rect x="${x}" y="${y}" width="1" height="1" fill="currentColor" />`; }
+            }
+            return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${r}</svg>`;
+        }
+
+        function spawnParticles(x, y) {
+            const colors = ['#00ffff', '#ff00ff', '#ffff00', '#ffffff', '#ff003c', '#39ff14'];
+            for (let i=0; i<10; i++) {
+                let p = document.createElement('div'); p.className = 'click-particle';
+                p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                p.style.left = x + 'px'; p.style.top = y + 'px';
+                document.body.appendChild(p);
+                let angle = Math.random() * Math.PI * 2, vel = 4 + Math.random() * 6;
+                let tx = Math.cos(angle) * vel * 10, ty = Math.sin(angle) * vel * 10;
+                requestAnimationFrame(() => { p.style.transform = `translate(${tx}px, ${ty}px) scale(0)`; p.style.opacity = '0'; });
+                setTimeout(() => { if(p.parentNode) p.parentNode.removeChild(p); }, 400);
+            }
+        }
+        const updateTheme = () => {
+            view.classList.toggle('dark-mode', state.isOverdoseMode);
+            modeBtn.innerText = state.isOverdoseMode ? '🎀 Need Cure?' : '💊 OVERDOSE MODE';
+            applyDistort();
+        };
+
+        const applyDistort = () => {
+            view.querySelectorAll('.ee-day-cell').forEach(cell => {
+                cell.classList.remove('is-distorting');
+                if (state.isOverdoseMode && Math.random() > 0.4) {
+                    cell.classList.add('is-distorting');
+                    cell.style.setProperty('--distort-dur', (0.5 + Math.random() * 2) + 's');
+                    cell.style.setProperty('--distort-delay', (Math.random() * 1.5) + 's');
+                }
+            });
+        };
+
+        modeBtn.onclick = (e) => { 
+            state.isOverdoseMode = !state.isOverdoseMode; 
+            updateTheme(); 
+            spawnParticles(e.clientX, e.clientY); 
+            save(); // Save to cloud
+        };
+
+        class CalParticle {
+            constructor() { this.reset(true); }
+            reset(init = false) {
+                this.y = Math.random() * canvas.height; this.dir = Math.random() > 0.5 ? 1 : -1;
+                this.baseS = (Math.random() * 2 + 1) * this.dir;
+                this.x = init ? Math.random() * canvas.width : (this.dir === 1 ? -50 : canvas.width + 50);
+                this.size = Math.floor(Math.random() * 3) + 2;
+                const colors = ['#00ffff', '#ff00ff', '#ffffff', '#ffff00']; this.color = colors[Math.floor(Math.random() * colors.length)];
+                this.trail = Math.random() > 0.7; this.history = [];
+            }
+            update() {
+                if (this.trail) { this.history.push({x:this.x, y:this.y}); if (this.history.length > 20) this.history.shift(); }
+                this.x += state.isOverdoseMode ? this.baseS * 5 : this.baseS;
+                if ((this.dir === 1 && this.x > canvas.width + 100) || (this.dir === -1 && this.x < -100)) this.reset();
+            }
+            draw() {
+                if (this.trail && this.history.length > 0) {
+                    ctx.beginPath(); ctx.moveTo(this.history[0].x, this.history[0].y);
+                    for (let i=1; i<this.history.length; i++) ctx.lineTo(this.history[i].x, this.history[i].y);
+                    ctx.strokeStyle = this.color; ctx.lineWidth = this.size; ctx.globalAlpha = 0.3; ctx.stroke(); ctx.globalAlpha = 1;
+                }
+                ctx.fillStyle = this.color; ctx.fillRect(Math.floor(this.x), Math.floor(this.y), this.size, this.size);
+            }
+        }
+
+        const triggerEffect = (el, lvl) => {
+            view.classList.toggle('dark-mode', state.isOverdoseMode);
+            void view.offsetWidth; 
+            if (lvl > 0 && lvl < 10) view.classList.add(`shake-active-${lvl}`);
+            const f = document.createElement('div'); f.className = `glitch-flash flash-lvl-${lvl}`; f.textContent = CAL_FLASH_TEXTS[lvl] || 'HIT!';
+            el.appendChild(f);
+            setTimeout(() => { 
+                view.classList.remove(`shake-active-${lvl}`); 
+                if (el.contains(f)) el.removeChild(f); 
+            }, 200 + (lvl * 50));
+        };
+
+        const triggerWipe = (key) => {
+            const wrap = view.querySelector('.ee-calendar-wrapper'), head = view.querySelector('.ee-header');
+            $('ee-tooltip').style.display = 'none'; wrap.classList.add('falling-wrapper'); head.classList.add('falling-wrapper');
+            const frags = view.querySelectorAll('.ee-day-cell, .ee-weekday, .ee-nav-btn, .ee-month-title, .ee-control-btn, .ee-speech-bubble');
+            frags.forEach(f => {
+                f.style.setProperty('--fall-x', (Math.random()-0.5)*400+'px'); f.style.setProperty('--fall-rot', (Math.random()-0.5)*720+'deg');
+                f.style.animationDelay = (Math.random()*0.3)+'s'; if(f.classList.contains('ee-speech-bubble')) f.style.transition = 'none'; f.classList.add('falling');
+            });
+            setTimeout(() => $('ee-whiteout').classList.add('whiteout-active'), 1000);
+            setTimeout(() => {
+                const data = getCalData();
+                data[key] = { state: 0, color: '' }; 
+                setCalData(data);
+                if (!state.isOverdoseMode) { state.isOverdoseMode = true; updateTheme(); }
+                wrap.classList.remove('falling-wrapper'); head.classList.remove('falling-wrapper');
+                frags.forEach(f => { 
+                    f.classList.remove('falling'); 
+                    f.style.removeProperty('animation-delay'); 
+                    f.style.removeProperty('--fall-x');
+                    f.style.removeProperty('--fall-rot');
+                });
+                view.querySelectorAll('.ee-speech-bubble').forEach(b => { if(b.parentNode) b.parentNode.removeChild(b); });
+                render(); $('ee-whiteout').classList.remove('whiteout-active');
+            }, 1800);
+        };
+
+        const render = () => {
+            grid.innerHTML = '';
+            const y = calCurrentDate.getFullYear(), m = calCurrentDate.getMonth();
+            monthDisplay.innerHTML = `<span>${y}. ${String(m+1).padStart(2,'0')}</span>`;
+            const first = new Date(y, m, 1).getDay(), total = new Date(y,m+1,0).getDate();
+            for (let i=0; i<first; i++) { const e = document.createElement('div'); e.className = 'ee-day-cell empty'; grid.appendChild(e); }
+            for (let d=1; d<=total; d++) {
+                const cell = document.createElement('div'); cell.className = 'ee-day-cell';
+                const key = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                cell.innerHTML = `<div class="ee-date-num">${d}</div><div class="ee-symbol"></div>`;
+                const symEl = cell.querySelector('.ee-symbol');
+                let data = getCalData()[key], lvl = (data && typeof data === 'object') ? (data.state || 0) : (data || 0);
+                let col = (data && typeof data === 'object') ? (data.color || '') : '';
+                if (lvl > 0 && lvl < 10) {
+                    if (!col) col = ['#00ffff', '#ff00ff', '#ffff00', '#ffffff', '#ff003c', '#39ff14'][Math.floor(Math.random()*6)];
+                    symEl.innerHTML = createSVG(CAL_SYMBOL_ORDER[((lvl-1)%6)+1]);
+                    symEl.style.color = col; symEl.style.setProperty('--current-neon', col); symEl.style.setProperty('--rand-delay', Math.random()+'s'); symEl.classList.add('neon-active');
+                }
+                cell.onmousemove = (e) => { const t = $('ee-tooltip'); t.style.left = (e.clientX+15)+'px'; t.style.top = (e.clientY+15)+'px'; t.style.display = 'block'; t.innerText = lvl === 0 ? "Empty..." : (lvl < 10 ? `Lv.${lvl} - ${CAL_FLASH_TEXTS[lvl]}` : "OVERDOSE..."); };
+                cell.onmouseleave = () => $('ee-tooltip').style.display = 'none';
+                cell.onmousedown = (e) => {
+                    if ($('ee-whiteout').classList.contains('whiteout-active')) return;
+                    spawnParticles(e.clientX, e.clientY); lvl++;
+                    if (lvl >= 10) { triggerWipe(key); return; }
+                    col = ['#00ffff', '#ff00ff', '#ffff00', '#ffffff', '#ff003c', '#39ff14'][Math.floor(Math.random()*6)];
+                    const data = getCalData();
+                    data[key] = { state: lvl, color: col }; 
+                    setCalData(data);
+                    symEl.innerHTML = createSVG(CAL_SYMBOL_ORDER[((lvl-1)%6)+1]);
+                    symEl.style.color = col; symEl.style.setProperty('--current-neon', col); symEl.style.setProperty('--rand-delay', Math.random()+'s'); symEl.classList.add('neon-active');
+                    triggerEffect(cell, lvl);
+                };
+                grid.appendChild(cell);
+            }
+            applyDistort();
+        };
+
+        const spawnBubble = () => {
+            if ($('ee-whiteout').classList.contains('whiteout-active') || state.currentView !== 'calendar') return;
+            const b = document.createElement('div'); b.className = 'ee-speech-bubble';
+            b.textContent = CAL_BUBBLE_PHRASES[Math.floor(Math.random()*CAL_BUBBLE_PHRASES.length)];
+            const y = 20 + Math.random() * (window.innerHeight - 80); b.style.top = y + 'px';
+            const isR = Math.random() > 0.5, dur = state.isOverdoseMode ? 2 + Math.random()*3 : 8 + Math.random()*12;
+            if (isR) { b.style.left = '-250px'; view.appendChild(b); setTimeout(() => { b.style.transition = `left ${dur}s linear`; b.style.left = '110vw'; }, 50); }
+            else { b.style.left = '110vw'; view.appendChild(b); setTimeout(() => { b.style.transition = `left ${dur}s linear`; b.style.left = '-250px'; }, 50); }
+            setTimeout(() => { if (b.parentNode) b.parentNode.removeChild(b); }, dur * 1000 + 100);
+        };
+
+        // Controls
+        fxBtn.onclick = () => { calFxActive = !calFxActive; fxBtn.textContent = calFxActive ? 'INTERNET FX: ON' : 'INTERNET FX: OFF'; fxBtn.classList.toggle('active', calFxActive); };
+        breatheBtn.onclick = () => {
+            if (calIntervals.breathe) { clearInterval(calIntervals.breathe); calIntervals.breathe = null; breatheBtn.textContent = 'TITLE BREATHE: OFF'; breatheBtn.classList.remove('active'); }
+            else { 
+                let h = 0; breatheBtn.textContent = 'TITLE BREATHE: ON'; breatheBtn.classList.add('active');
+                calIntervals.breathe = setInterval(() => { h = (h+15)%360; monthDisplay.style.setProperty('--current-neon', `hsl(${h}, 100%, 65%)`); }, 300);
+            }
+        };
+        blinkBtn.onclick = () => { 
+            const active = monthDisplay.classList.toggle('ee-title-blink');
+            blinkBtn.textContent = active ? 'TITLE BLINK: ON' : 'TITLE BLINK: OFF'; blinkBtn.classList.toggle('active', active);
+        };
+        $('ee-prevBtn').onclick = (e) => { spawnParticles(e.clientX, e.clientY); calCurrentDate.setMonth(calCurrentDate.getMonth() - 1); render(); };
+        $('ee-nextBtn').onclick = (e) => { spawnParticles(e.clientX, e.clientY); calCurrentDate.setMonth(calCurrentDate.getMonth() + 1); render(); };
+
+        monthDisplay.onclick = (e) => {
+            spawnParticles(e.clientX, e.clientY);
+            const colors = ['#00ffff', '#ff00ff', '#ffff00', '#ffffff', '#ff003c', '#39ff14'];
+            const newNeonColor = colors[Math.floor(Math.random() * colors.length)];
+            monthDisplay.style.setProperty('--current-neon', newNeonColor);
+        };
+
+        // Main Loop
+        function animate() {
+            if (state.currentView !== 'calendar') return;
+            if (calFxActive) { ctx.clearRect(0,0,canvas.width,canvas.height); calParticles.forEach(p => { p.update(); p.draw(); }); }
+            else ctx.clearRect(0,0,canvas.width,canvas.height);
+            calAnimReq.particles = requestAnimationFrame(animate);
+        }
+
+        // Init
+        $('ee-manicText').innerText = "OVERDOSE ANGEL DIE LOVE NEED TRASH GLITCH ERROR INTERNET so hiiiiiiiigh SO HIIIIIIIIGH!!! ".repeat(250);
+        updateTheme();
+        for (let i=0; i<80; i++) calParticles.push(new CalParticle());
+        startCalAnimations();
+        render();
+
+        function startCalAnimations() {
+            if (!calIntervals.bubble) calIntervals.bubble = setInterval(spawnBubble, 2000);
+            if (!calAnimReq.particles) animate();
+        }
+    }
+
+    window.stopCalendar = function() {
+        clearInterval(calIntervals.bubble); calIntervals.bubble = null;
+        clearInterval(calIntervals.breathe); calIntervals.breathe = null;
+        cancelAnimationFrame(calAnimReq.particles); calAnimReq.particles = null;
+    };
 
     // FIREBASE INITIALIZATION ENTRY
     setupAuth();
