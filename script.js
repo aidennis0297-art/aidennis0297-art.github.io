@@ -550,20 +550,44 @@ document.addEventListener('DOMContentLoaded', () => {
         const fullText = el.todoInput.value.trim(); if (!fullText) return;
         const pr = parseDate(fullText);
         let taskText = fullText;
-        if (pr.matched) {
-            taskText = fullText.replace(pr.matched, '').replace(/\s+/g, ' ').trim();
+        let finalIsRoutine = el.isRoutineCb.checked;
+        let finalPeriod = el.routinePeriod.value;
+
+        // Auto-detect routine keywords in input
+        const routineRegs = [
+            { reg: /(매일|이틀마다|3일마다)/, period: { '매일': 'daily', '이틀마다': 'every2days', '3일마다': 'every3days' } },
+            { reg: /매주\s*([월화수목금토일])요일마다/, periodBase: { '월': 'mon', '화': 'tue', '수': 'wed', '목': 'thu', '금': 'fri', '토': 'sat', '일': 'sun' } }
+        ];
+
+        for (let r of routineRegs) {
+            const match = taskText.match(r.reg);
+            if (match) {
+                finalIsRoutine = true;
+                if (r.period) finalPeriod = r.period[match[1]];
+                else if (r.periodBase) finalPeriod = r.periodBase[match[1]];
+                taskText = taskText.replace(match[0], '').replace(/\s+/g, ' ').trim();
+                break;
+            }
         }
-        if (!taskText) taskText = fullText; // Fallback if entire text was a date
+
+        if (pr.matched) {
+            taskText = taskText.replace(pr.matched, '').replace(/\s+/g, ' ').trim();
+        }
+        if (!taskText) taskText = fullText;
 
         const newOrder = state.tasks.length ? Math.max(...state.tasks.map(t => t.order || 0)) + 1 : 0;
         state.tasks.push({
             id: Date.now().toString(), text: taskText, categoryId: el.catSelect.value || 'cat_life',
-            status: 'active', isRoutine: el.isRoutineCb.checked,
-            recurrence: el.isRoutineCb.checked ? el.routinePeriod.value : null,
+            status: 'active', isRoutine: finalIsRoutine,
+            recurrence: finalIsRoutine ? finalPeriod : null,
             dueDate: pr.targetDate ? pr.targetDate.toISOString() : null,
             order: newOrder, createdAt: new Date().toISOString()
         });
-        save(); el.todoInput.value = ""; el.inputHL.innerHTML = ""; renderTasks(); updateBadges();
+        save(); el.todoInput.value = ""; el.inputHL.innerHTML = ""; 
+        // Reset routine toggle and period if they were set by auto-detect
+        el.isRoutineCb.checked = false; el.routinePeriod.value = 'daily';
+        el.isRoutineCb.dispatchEvent(new Event('change'));
+        renderTasks(); updateBadges();
     }
 
     function handleListClick(e) {
@@ -628,7 +652,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 let next = t.dueDate ? new Date(t.dueDate) : new Date();
                 const advance = () => {
                     if (t.recurrence === 'daily') next.setDate(next.getDate() + 1);
-                    else if (t.recurrence === 'weekly') next.setDate(next.getDate() + 7);
+                    else if (t.recurrence === 'every2days') next.setDate(next.getDate() + 2);
+                    else if (t.recurrence === 'every3days') next.setDate(next.getDate() + 3);
+                    else if (t.recurrence === 'weekly' || ['mon','tue','wed','thu','fri','sat','sun'].includes(t.recurrence)) next.setDate(next.getDate() + 7);
                     else if (t.recurrence === 'monthly') next.setMonth(next.getMonth() + 1);
                 };
                 if (next <= now) advance();
@@ -679,8 +705,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function getPool() {
         if(!state.tasks) return [];
         const v = state.currentView;
+        // Filter out ghost tasks (no text and not a routine being actively edited)
+        const activeTasks = state.tasks.filter(t => t.text !== "" || t.isRoutine);
         if (v === 'all') {
-            return state.tasks
+            return activeTasks
                 .filter(t => t.status === 'active' && !t.isRoutineHistory)
                 .sort((a,b) => {
                     const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
@@ -689,16 +717,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     return (a.order || 0) - (b.order || 0);
                 });
         }
-        if (v === 'super-routine') return state.tasks.filter(t => t.status === 'active' && t.isRoutine && !t.isRoutineHistory).sort((a,b) => (a.order||0) - (b.order||0));
-        if (v === 'sr-reminders') return state.tasks.filter(t => t.status === 'active' && !t.isRoutine && !t.isRoutineHistory).sort((a,b) => {
+        if (v === 'super-routine') return activeTasks.filter(t => t.status === 'active' && t.isRoutine && !t.isRoutineHistory).sort((a,b) => (a.order||0) - (b.order||0));
+        if (v === 'sr-reminders') return activeTasks.filter(t => t.status === 'active' && !t.isRoutine && !t.isRoutineHistory).sort((a,b) => {
             const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
             const db = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
             if (da !== db) return da - db;
             return (a.order || 0) - (b.order || 0);
         });
-        if (v === 'history') return state.tasks.filter(t => t.status === 'completed').sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt));
-        if (v === 'trash') return state.tasks.filter(t => t.status === 'deleted').sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-        return state.tasks.filter(t => t.status === 'active' && t.categoryId === v && !t.isRoutineHistory).sort((a,b) => (a.order||0) - (b.order||0));
+        if (v === 'history') return activeTasks.filter(t => t.status === 'completed').sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt));
+        if (v === 'trash') return activeTasks.filter(t => t.status === 'deleted').sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+        return activeTasks.filter(t => t.status === 'active' && t.categoryId === v && !t.isRoutineHistory).sort((a,b) => (a.order||0) - (b.order||0));
     }
 
     // --- RENDERING ---
@@ -846,7 +874,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (t.dueDate && !isDone && !t.isRoutine) {
             const d = new Date(t.dueDate), now = new Date(); now.setHours(0,0,0,0);
             const tmr = new Date(now); tmr.setDate(now.getDate() + 1);
-            if (d.toDateString() === tmr.toDateString()) {
+            if (d.toDateString() === now.toDateString() || d.toDateString() === tmr.toDateString()) {
                 glowClass = 'glow-red';
             }
         }
@@ -1048,11 +1076,7 @@ document.addEventListener('DOMContentLoaded', () => {
             days.push(d);
         }
         
-        let h = `<div class="hg-row hg-header"><div class="hg-label">이번 주 계획</div>`;
-        days.forEach(d => h += `<div class="hg-cell-hdr ${d.toDateString()===new Date().toDateString()?'today':''}">${['월','화','수','목','금','토','일'][days.indexOf(d)]}</div>`);
-        el.habitGrid.innerHTML = h + '</div>';
-        
-        // --- 리마인더 섹션 (habit grid 상단으로 이동) ---
+        // --- 리마인더 섹션 ---
         const reminders = state.tasks.filter(t => t.status === 'active' && !t.isRoutine && !t.isRoutineHistory);
         if (reminders.length > 0) {
             const separator = document.createElement('div');
@@ -1084,20 +1108,85 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // --- 요일 헤더 (리마인더 아래로 이동) ---
+        let newH = `<div class="hg-row hg-header"><div class="hg-label">이번 주 계획</div>`;
+        const dayNames = ['월','화','수','목','금','토','일'];
+        days.forEach((d, idx) => {
+            const isToday = d.toDateString() === new Date().toDateString();
+            newH += `<div class="hg-cell-hdr ${isToday?'today':''}" data-day-idx="${idx}">${dayNames[idx]}</div>`;
+        });
+        const headerRow = document.createElement('div');
+        headerRow.innerHTML = newH + '</div>';
+        el.habitGrid.appendChild(headerRow.firstChild);
+
+        // --- 루틴 섹션 ---
         const routines = getPool().filter(r => r.recurrence !== 'monthly');
         routines.forEach(r => {
             const isWeekly = r.recurrence === 'weekly';
+            const specificDayNum = ['sun','mon','tue','wed','thu','fri','sat'].indexOf(r.recurrence);
             const delBtn = state.hgEditMode ? `<i class="fas fa-minus-circle hg-del-btn" data-rid="${r.id}"></i>` : '';
-            const typeBadge = isWeekly ? `<span class="hg-type-badge">주간</span>` : '';
-            let row = `<div class="hg-row"><div class="hg-label">${delBtn}${typeBadge}${esc(r.text)}</div>`;
+            
+            let typeLabel = '';
+            if (isWeekly) typeLabel = '주간';
+            else if (r.recurrence === 'every2days') typeLabel = '2일';
+            else if (r.recurrence === 'every3days') typeLabel = '3일';
+            else if (specificDayNum > -1) typeLabel = dayNames[(specificDayNum+6)%7];
+
+            const typeBadge = typeLabel ? `<span class="hg-type-badge">${typeLabel}</span>` : '';
+            let rowBody = `<div class="hg-row"><div class="hg-label">${delBtn}${typeBadge}${esc(r.text)}</div>`;
+            
             const weekCompletion = isWeekly && state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && days.some(d => new Date(t.completedAt).toDateString() === d.toDateString()));
 
             days.forEach(day => {
+                let cellDisabled = false;
+                // Specific Day logic
+                if (specificDayNum > -1 && day.getDay() !== specificDayNum) cellDisabled = true;
+                
                 const dayDone = state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === day.toDateString());
                 const done = isWeekly ? weekCompletion : dayDone;
-                row += `<div class="hg-cell ${done?'done':''}" data-rid="${r.id}" data-day="${day.toISOString()}" data-weekly="${isWeekly}">${done?'<i class="fas fa-check"></i>':''}</div>`;
+                
+                if (cellDisabled) {
+                    rowBody += `<div class="hg-cell disabled" style="opacity:0.2; pointer-events:none;"></div>`;
+                } else {
+                    rowBody += `<div class="hg-cell ${done?'done':''}" data-rid="${r.id}" data-day="${day.toISOString()}" data-weekly="${isWeekly}">${done?'<i class="fas fa-check"></i>':''}</div>`;
+                }
             });
-            el.habitGrid.innerHTML += row + '</div>';
+            const rowEl = document.createElement('div');
+            rowEl.innerHTML = rowBody + '</div>';
+            el.habitGrid.appendChild(rowEl.firstChild);
+        });
+
+        // Toggle All Per Day
+        el.habitGrid.querySelectorAll('.hg-cell-hdr').forEach(hdr => {
+            hdr.onclick = () => {
+                const dayIdx = parseInt(hdr.dataset.dayIdx);
+                const day = days[dayIdx];
+                const ds = day.toDateString();
+                
+                // Find all enabled cells for this day
+                const cells = Array.from(el.habitGrid.querySelectorAll(`.hg-cell[data-day]`))
+                                   .filter(c => new Date(c.dataset.day).toDateString() === ds);
+                
+                const allDone = cells.length > 0 && cells.every(c => c.classList.contains('done'));
+                
+                cells.forEach(c => {
+                    const rid = c.dataset.rid;
+                    const isWeekly = c.dataset.weekly === 'true';
+                    const ex = state.tasks.find(t => t.originalRoutineId === rid && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds);
+                    
+                    if (allDone) {
+                        // Uncheck all
+                        if (ex) state.tasks = state.tasks.filter(x => x.id !== ex.id);
+                    } else {
+                        // Check empty ones
+                        if (!ex) {
+                            const rt = state.tasks.find(x => x.id === rid);
+                            state.tasks.push({ ...rt, id: Date.now()+'h'+Math.random(), originalRoutineId: rid, status: 'completed', completedAt: day.toISOString(), isRoutineHistory: true });
+                        }
+                    }
+                });
+                save(); renderTasks();
+            };
         });
 
         if (routines.length > 0) {
