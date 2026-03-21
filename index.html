@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Productivity</title>
+    <title>뚜두리스트</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css?v=2">
     <link rel="stylesheet" href="styles-extra.css">
@@ -16,13 +17,14 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
+
 <body>
     <!-- Authentication Overlay -->
     <div id="auth-overlay" class="auth-overlay">
         <div class="auth-card">
             <h2 id="auth-title">로그인</h2>
-            <p id="auth-subtitle">내 아이디로 투두리스트 시작하기</p>
-            
+            <p id="auth-subtitle">내 아이디로 뚜두리스트 시작하기</p>
+
             <div class="auth-form">
                 <div class="input-group">
                     <label for="auth-id"><i class="fas fa-user"></i> 아이디</label>
@@ -32,17 +34,18 @@
                     <label for="auth-pw"><i class="fas fa-lock"></i> 비밀번호</label>
                     <input type="password" id="auth-pw" placeholder="영문/숫자 4자 이상">
                 </div>
-                
+
                 <div id="auth-error-msg" class="auth-error hidden"></div>
-                
-                <button id="auth-submit-btn" class="modal-btn primary" style="width: 100%; margin-top: 10px;">로그인</button>
+
+                <button id="auth-submit-btn" class="modal-btn primary"
+                    style="width: 100%; margin-top: 10px;">로그인</button>
             </div>
-            
+
             <div class="auth-switch">
                 <span id="auth-switch-text">계정이 없으신가요?</span>
                 <button id="auth-switch-btn" class="text-btn">회원가입</button>
             </div>
-            
+
             <div id="auth-loading" class="auth-loading hidden">
                 <i class="fas fa-spinner fa-spin"></i> 연결 중...
             </div>
@@ -54,9 +57,12 @@
         <div id="mobile-overlay" class="mobile-overlay hidden"></div>
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h2>Productivity</h2>
-                <div class="theme-switcher-mini" id="theme-toggle-btn">
-                    <i class="fas fa-moon"></i>
+                <h2>뚜두리스트</h2>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <div class="sidebar-kb-key" style="margin-left:0; font-size:0.7rem; padding:1.5px 4.5px; opacity:0.8;">`</div>
+                    <div class="theme-switcher-mini" id="theme-toggle-btn" title="테마 전환 (`)">
+                        <i class="fas fa-moon"></i>
+                    </div>
                 </div>
             </div>
             <nav class="sidebar-nav">
@@ -69,19 +75,22 @@
                         <li class="nav-item" data-view="all">
                             <i class="fas fa-layer-group text-blue"></i>
                             <span>모아보기</span>
+                            <div class="sidebar-kb-key">1</div>
                         </li>
                         <li class="nav-item active" data-view="super-routine">
                             <i class="fas fa-bolt text-purple"></i>
                             <span>슈퍼루틴</span>
                             <span class="badge" id="badge-routine">0</span>
+                            <div class="sidebar-kb-key" style="margin-left:4px;">2</div>
                         </li>
                     </ul>
                 </div>
-                
+
                 <div class="nav-section">
                     <div class="section-header">
                         <h3>My Lists</h3>
-                        <button class="icon-btn" id="add-category-btn" title="카테고리 추가"><i class="fas fa-plus"></i></button>
+                        <button class="icon-btn" id="add-category-btn" title="카테고리 추가"><i
+                                class="fas fa-plus"></i></button>
                     </div>
                     <ul class="nav-list" id="category-list"></ul>
                 </div>
@@ -92,28 +101,34 @@
                         <i class="fas fa-chevron-down"></i>
                     </div>
                     <ul class="nav-list" id="bottom-nav">
+                        <li class="nav-item hidden" data-view="calendar">
+                            <i class="far fa-calendar-check text-blue"></i>
+                            <span>캘린더</span>
+                        </li>
                         <li class="nav-item" data-view="history">
                             <i class="fas fa-check-circle text-green"></i>
                             <span>완료 리마인더</span>
+                            <div class="sidebar-kb-key">4</div>
                         </li>
                         <li class="nav-item" data-view="victory-log">
                             <i class="fas fa-award text-purple"></i>
                             <span>성공의 기록</span>
-                        </li>
-                        <li class="nav-item" data-view="calendar">
-                            <i class="fas fa-calendar-alt text-blue"></i>
-                            <span>캘린더</span>
+                            <div class="sidebar-kb-key">5</div>
                         </li>
                         <li class="nav-item" data-view="trash">
                             <i class="fas fa-trash-alt text-gray"></i>
                             <span>휴지통</span>
+                            <div class="sidebar-kb-key">6</div>
                         </li>
                         <li class="nav-item" data-view="settings">
                             <i class="fas fa-cog text-gray"></i>
                             <span>설정</span>
                         </li>
-                        <a href="https://drive.google.com/drive/folders/1naBWRtWyanVDXYPjg2arKLJ89_h94Zoi?usp=sharing" target="_blank" class="nav-item-dl download-widget-btn" id="download-widget-btn" style="text-decoration:none; display:flex; align-items:center; gap:12px; padding:8px 12px; border-radius:8px; font-size:.85rem; font-weight:700; background: var(--blue-bg); margin-top: 10px;">
-                            <i class="fas fa-download text-blue" style="font-size:.92rem; width:20px; text-align:center;"></i>
+                        <a href="https://drive.google.com/drive/folders/1naBWRtWyanVDXYPjg2arKLJ89_h94Zoi?usp=sharing"
+                            target="_blank" class="nav-item-dl download-widget-btn" id="download-widget-btn"
+                            style="text-decoration:none; display:flex; align-items:center; gap:12px; padding:8px 12px; border-radius:8px; font-size:.85rem; font-weight:700; background: var(--blue-bg); margin-top: 10px;">
+                            <i class="fas fa-download text-blue"
+                                style="font-size:.92rem; width:20px; text-align:center;"></i>
                             <span class="text-blue">위젯 다운로드 (PC)</span>
                         </a>
                         <li class="nav-item" id="logout-btn">
@@ -163,7 +178,8 @@
                                     <span class="label">보상:</span>
                                     <input type="text" id="reward-input" placeholder="스스로에게 줄 선물을 적어보세요..." />
                                 </div>
-                                <button id="save-reward-btn" class="modal-btn primary" style="margin-top:10px; width:100%">목표 설정 완료</button>
+                                <button id="save-reward-btn" class="modal-btn primary"
+                                    style="margin-top:10px; width:100%">목표 설정 완료</button>
                             </div>
                             <div class="reward-display hidden" id="reward-display-text">
                                 <div class="certificate-badge">
@@ -186,7 +202,8 @@
                             </div>
                             <div class="chart-footer">
                                 <div class="today-rate-chip" id="today-rate">이번 주 평균 달성: 0%</div>
-                                <div class="reward-chip hidden" id="reward-display-chip"><i class="fas fa-gift"></i> </div>
+                                <div class="reward-chip hidden" id="reward-display-chip"><i class="fas fa-gift"></i>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -209,10 +226,10 @@
                 <ul class="todo-list" id="todo-list"></ul>
 
                 <div id="settings-view" class="settings-view hidden">
-    
+
                     <div class="settings-group">
                         <h3>이스터에그</h3>
-                         <p class="settings-desc">이스터에그</p>
+                        <p class="settings-desc">이스터에그</p>
                         <button id="ee-enable-btn" class="modal-btn secondary">
                             <i class="fas fa-lock"></i> 이스터에그 해제
                         </button>
@@ -224,6 +241,61 @@
                         <button id="reset-all-btn" class="modal-btn danger-outline">
                             <i class="fas fa-redo-alt"></i> 전체 초기화
                         </button>
+                    </div>
+
+                    <div class="settings-group">
+                        <h3>키보드 단축키 가이드</h3>
+                        <p class="settings-desc">마우스 조작 없이 빠르고 효율적으로 앱을 제어해보세요.</p>
+                        <div class="shortcuts-grid">
+                            <div class="shortcut-item">
+                                <div class="kb-key">/</div>
+                                <div class="kb-desc">입력창으로 포커스 이동</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <div class="kb-key">↑ / ↓</div>
+                                <div class="kb-desc" style="flex:auto">또는</div>
+                                <div class="kb-key">j / k</div>
+                                <div class="kb-desc">리스트 아이템 상/하 이동</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <div class="kb-key">Space</div>
+                                <div class="kb-desc" style="flex:auto">또는</div>
+                                <div class="kb-key">x</div>
+                                <div class="kb-desc">선택된 할 일 완료 / 미완료 변경</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <div class="kb-key">Delete</div>
+                                <div class="kb-desc">선택된 할 일 항목 삭제</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <div class="kb-key">#태그</div>
+                                <div class="kb-desc">할 일 입력 중 카테고리 자동 설정</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <div class="kb-key">1 ~ 6</div>
+                                <div class="kb-desc">사이드바 탭 전환 (3 누를 때마다 카테고리 순환, 4:완료 리마, 5:성공의 기록, 6:휴지통)</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <div class="kb-key">`</div>
+                                <div class="kb-desc">다크/화이트 모드 및 테마 전환</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <div class="kb-key">\</div>
+                                <div class="kb-desc">화면의 단축키 표시 껐다 켜기 (기능은 유지)</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <div class="kb-key">Enter</div>
+                                <div class="kb-desc">입력된 할 일 등록 및 추가</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <div class="kb-key">Tab</div>
+                                <div class="kb-desc">매일 / 매주 / 매월 루틴 모드 전환</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <div class="kb-key">Esc</div>
+                                <div class="kb-desc">입력 중 자동 감지(날짜/규칙) 취소</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -254,9 +326,10 @@
                 <div id="ee-tooltip"></div>
 
                 <div class="ee-header">
-                    <button class="ee-nav-btn" id="ee-prevBtn"><</button>
-                    <div class="ee-month-title ee-title-blink" id="ee-monthDisplay"><span>2026. 03</span></div>
-                    <button class="ee-nav-btn" id="ee-nextBtn">></button>
+                    <button class="ee-nav-btn" id="ee-prevBtn">
+                        << /button>
+                            <div class="ee-month-title ee-title-blink" id="ee-monthDisplay"><span>2026. 03</span></div>
+                            <button class="ee-nav-btn" id="ee-nextBtn">></button>
                 </div>
 
                 <div class="ee-calendar-wrapper">
@@ -295,7 +368,7 @@
                                 <option value="weekly">매주</option>
                                 <option value="monthly">매월</option>
                             </select>
-                            
+
                             <!-- Advanced Weekly Options -->
                             <div id="routine-weekly-options" class="hidden advanced-recurrence-options">
                                 <div class="day-picker">
@@ -353,14 +426,18 @@
                     <div class="input-row">
                         <div class="input-container">
                             <div class="input-highlights" id="input-highlights"></div>
-                            <input type="text" id="todo-input" placeholder="할 일을 입력하세요 (예: 내일 오후 3시 회능)..." autocomplete="off">
+                            <input type="text" id="todo-input"
+                                placeholder="ex: #학교 매주 목요일 공학 과제 제출하기,  #생활 내일 오후 3시 장보기" autocomplete="off">
+                            <button id="cancel-auto-parse-btn" class="cancel-auto-btn hidden" title="자동 변환 취소 (ESC)"><i
+                                    class="fas fa-times"></i></button>
                         </div>
                         <button id="add-btn"><i class="fas fa-arrow-up"></i></button>
                     </div>
                 </div>
                 <div class="date-hint-tooltip" id="date-hint-tooltip">
                     <i class="fas fa-magic"></i>
-                    <span>날짜 자동 변환: <strong>오늘</strong>, <strong>내일</strong>, <strong>모레</strong>, <strong>이번주 수요일</strong>, <strong>다음주 금요일</strong>, <strong>3월 25일</strong></span>
+                    <span>날짜 자동 변환: <strong>오늘</strong>, <strong>내일</strong>, <strong>모레</strong>, <strong>이번주
+                            수요일</strong>, <strong>다음주 금요일</strong>, <strong>3월 25일</strong></span>
                 </div>
             </div>
         </main>
@@ -385,4 +462,5 @@
 
     <script src="script.js"></script>
 </body>
+
 </html>

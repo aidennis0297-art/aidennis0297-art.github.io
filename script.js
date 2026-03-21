@@ -19,7 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
         theme: 'light',
         calendarData: {},
         isOverdoseMode: false,
-        isEEEnabled: false
+        isEEEnabled: false,
+        showShortcuts: true
     };
 
     const $ = id => document.getElementById(id);
@@ -28,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- DOM ---
     const el = {
         todoList: $('todo-list'), todoInput: $('todo-input'), inputHL: $('input-highlights'),
+        cancelAutoBtn: $('cancel-auto-parse-btn'),
         addBtn: $('add-btn'), viewTitle: $('current-view-title'), dateDisplay: $('date-display'),
         catList: $('category-list'), addCatBtn: $('add-category-btn'),
         isRoutineCb: $('is-routine-cb'), routineToggle: $('routine-toggle-label'),
@@ -195,7 +197,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 theme: state.theme || 'light',
                 calendarData: state.calendarData || {},
                 isOverdoseMode: state.isOverdoseMode || false,
-                isEEEnabled: state.isEEEnabled || false
+                isEEEnabled: state.isEEEnabled || false,
+                showShortcuts: (state.showShortcuts !== undefined) ? state.showShortcuts : true
             });
         }, 800);
     };
@@ -219,7 +222,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     theme: data.theme || 'light',
                     calendarData: data.calendarData || {},
                     isOverdoseMode: data.isOverdoseMode || false,
-                    isEEEnabled: data.isEEEnabled || false
+                    isEEEnabled: data.isEEEnabled || false,
+                    showShortcuts: (data.showShortcuts !== undefined) ? data.showShortcuts : true
                 };
             }
             
@@ -293,7 +297,12 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEvents();
         renderSidebar();
         updateEEUI();
+        updateShortcutVisibility();
         setView(state.currentView);
+    }
+
+    function updateShortcutVisibility() {
+        document.body.classList.toggle('hide-shortcuts', !state.showShortcuts);
     }
     
     function updateEEUI() {
@@ -353,7 +362,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add Task
         el.addBtn.onclick = (e) => { e.preventDefault(); addTask(); };
         el.todoInput.onkeypress = e => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } };
-        el.todoInput.oninput = handleHL;
+        el.todoInput.oninput = () => {
+            state.cancelAutoParse = false;
+            handleHL();
+        };
+        if (el.cancelAutoBtn) {
+            el.cancelAutoBtn.onclick = (e) => {
+                e.preventDefault();
+                state.cancelAutoParse = true;
+                handleHL();
+                el.todoInput.focus();
+            };
+        }
         el.todoInput.onfocus = () => { 
             if ($('date-hint-tooltip') && !localStorage.getItem('dateHintShown')) {
                 $('date-hint-tooltip').classList.add('visible'); 
@@ -478,11 +498,116 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!el.modal.classList.contains('hidden')) {
                 if (e.key === 'Escape') closeModal();
                 if (e.key === 'Enter') submitModal();
+                return;
+            }
+
+            const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT';
+
+            if (!isInput) {
+                if (e.key === '/') {
+                    e.preventDefault();
+                    el.todoInput.focus();
+                    return;
+                }
+
+                if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+                    e.preventDefault();
+                    if (e.key === '3' && state.categories.length > 0) {
+                        const curIdx = state.categories.findIndex(c => c.id === state.currentView);
+                        const nextIdx = (curIdx + 1) % state.categories.length;
+                        setView(state.categories[nextIdx].id);
+                        return;
+                    }
+                    const viewsMap = {'1':'all', '2':'super-routine', '4':'history', '5':'victory-log', '6':'trash'};
+                    if (viewsMap[e.key]) setView(viewsMap[e.key]);
+                    return;
+                }
+
+                if (e.key === '`') {
+                    e.preventDefault();
+                    if (el.themeToggleBtn) el.themeToggleBtn.click();
+                    return;
+                }
+
+                if (e.key === '\\') {
+                    e.preventDefault();
+                    state.showShortcuts = !state.showShortcuts;
+                    updateShortcutVisibility();
+                    save();
+                    return;
+                }
+
+                const getFocusables = () => Array.from(document.querySelectorAll('.todo-item, .hg-row, .hg-pill-row, .hg-reminder-row')).filter(el => !el.classList.contains('hidden') && el.offsetParent !== null);
+                
+                if (['ArrowDown', 'j'].includes(e.key)) {
+                    e.preventDefault();
+                    const focusable = getFocusables();
+                    state.kbFocusIndex = Math.min((state.kbFocusIndex || -1) + 1, focusable.length - 1);
+                    updateKbFocus(focusable);
+                } else if (['ArrowUp', 'k'].includes(e.key)) {
+                    e.preventDefault();
+                    const focusable = getFocusables();
+                    state.kbFocusIndex = Math.max((state.kbFocusIndex || -1) - 1, 0);
+                    updateKbFocus(focusable);
+                } else if (['x', ' ', 'Enter'].includes(e.key)) {
+                    const focusable = getFocusables();
+                    if (state.kbFocusIndex >= 0 && focusable[state.kbFocusIndex]) {
+                        e.preventDefault();
+                        toggleKbFocused(focusable[state.kbFocusIndex]);
+                    }
+                } else if (e.key === 'Delete') {
+                    const focusable = getFocusables();
+                    if (state.kbFocusIndex >= 0 && focusable[state.kbFocusIndex]) {
+                        e.preventDefault();
+                        deleteKbFocused(focusable[state.kbFocusIndex]);
+                    }
+                }
             }
         };
 
+        function updateKbFocus(items) {
+            document.querySelectorAll('.kb-focus').forEach(el => el.classList.remove('kb-focus'));
+            if (state.kbFocusIndex >= 0 && state.kbFocusIndex < items.length) {
+                items[state.kbFocusIndex].classList.add('kb-focus');
+                items[state.kbFocusIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else {
+                state.kbFocusIndex = -1;
+            }
+        }
+
+        function toggleKbFocused(el) {
+            if (el.classList.contains('todo-item')) {
+                const id = el.dataset.id;
+                const t = state.tasks.find(x => x.id === id);
+                if (t) completeTask(t);
+            } else if (el.classList.contains('hg-reminder-row')) {
+                const cb = el.querySelector('.hg-reminder-check, .cb');
+                if (cb) cb.click();
+            } else if (el.classList.contains('hg-row') || el.classList.contains('hg-pill-row')) {
+                let targetCell = el.querySelector('.hg-cell.today');
+                if (!targetCell) targetCell = el.querySelector('.hg-cell:not(.hg-cell-hdr)');
+                if (targetCell) targetCell.click();
+            }
+        }
+
+        function deleteKbFocused(el) {
+            if (el.classList.contains('todo-item')) {
+                const id = el.dataset.id;
+                const t = state.tasks.find(x => x.id === id);
+                if (t && t.status !== 'deleted') {
+                     t.status = 'deleted'; save(); renderTasks(); updateBadges(); 
+                }
+            } else {
+                 const delBtn = el.querySelector('.hg-del-btn');
+                 if (delBtn) delBtn.click();
+            }
+        }
+
         el.todoInput.onkeydown = e => {
-            if (e.key === 'Tab') {
+            if (e.key === 'Escape') {
+                state.cancelAutoParse = true;
+                handleHL();
+            } else if (e.key === 'Tab') {
                 e.preventDefault();
                 const isRoutine = el.isRoutineCb.checked;
                 const periods = ['daily', 'weekly', 'monthly'];
@@ -677,7 +802,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- TASK LOGIC ---
     function addTask() {
         const fullText = el.todoInput.value.trim(); if (!fullText) return;
-        const pr = parseDate(fullText);
+        const pr = state.cancelAutoParse ? { targetDate: null, matched: null, timeMatched: null } : parseDate(fullText);
         let taskText = fullText;
         let finalIsRoutine = el.isRoutineCb.checked;
         let finalPeriod = el.routinePeriod.value;
@@ -686,6 +811,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const daysMap = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 0 };
         const weekMap = { '첫째주': 1, '둘째주': 2, '셋째주': 3, '넷째주': 4, '마지막주': 5 };
 
+        if (!state.cancelAutoParse) {
         // 1. Weekly with specific day
         const weeklyMatch = taskText.match(/매주\s*([월화수목금토일])요일(마다)?/);
         if (weeklyMatch) {
@@ -723,6 +849,18 @@ document.addEventListener('DOMContentLoaded', () => {
             taskText = taskText.replace(monthlyDateMatch[0], '').replace(/\s+/g, ' ').trim();
         }
 
+        // 5. Every 2 or 3 days
+        const everyMatch = taskText.match(/(이틀|격일|3일|삼일)마다/);
+        if (everyMatch) {
+            finalIsRoutine = true; 
+            if (everyMatch[1] === '이틀' || everyMatch[1] === '격일') {
+                finalPeriod = 'every2days';
+            } else {
+                finalPeriod = 'every3days';
+            }
+            taskText = taskText.replace(everyMatch[0], '').replace(/\s+/g, ' ').trim();
+        }
+
         // 4. Daily with time
         if (pr.timeMatched) {
             const timeValMatch = pr.timeMatched.match(/(\d{1,2})시(\s*(\d{1,2})분)?/);
@@ -737,6 +875,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (pr.matched) {
             taskText = taskText.replace(pr.matched, '').replace(/\s+/g, ' ').trim();
         }
+
+        const hashtagMatch = taskText.match(/#(\S+)/);
+        if (hashtagMatch) {
+            const cName = hashtagMatch[1];
+            const foundCat = state.categories.find(c => c.name === cName);
+            if (foundCat) {
+                el.catSelect.value = foundCat.id;
+                taskText = taskText.replace(hashtagMatch[0], '').replace(/\s+/g, ' ').trim();
+            }
+        }
+        } // End of !state.cancelAutoParse feature flag skip
         if (!taskText) taskText = fullText;
 
         const newOrder = state.tasks.length ? Math.max(...state.tasks.map(t => t.order || 0)) + 1 : 0;
@@ -772,6 +921,8 @@ document.addEventListener('DOMContentLoaded', () => {
             order: newOrder, createdAt: new Date().toISOString()
         });
         save(); el.todoInput.value = ""; el.inputHL.innerHTML = ""; 
+        state.cancelAutoParse = false;
+        if (el.cancelAutoBtn) el.cancelAutoBtn.classList.add('hidden');
         // Reset
         el.isRoutineCb.checked = false; 
         el.routinePeriod.value = 'daily';
@@ -1064,6 +1215,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if ($('reward-display-text')) $('reward-display-text').classList.add('hidden');
             }
         }
+        
+        setTimeout(() => { if (typeof updateKbFocus === 'function') updateKbFocus(); }, 10);
     }
 
     function tHTML(t) {
@@ -1186,6 +1339,7 @@ document.addEventListener('DOMContentLoaded', () => {
             li.innerHTML = `
                 <div class="cat-icon-trigger" style="color:${c.color || '#8e8e93'}"><i class="fas fa-folder"></i></div>
                 <span class="cat-label">${esc(c.name)}</span>
+                <div class="sidebar-kb-key">3</div>
                 <div class="cat-actions ${state.editMode ? '' : 'hidden-actions'}">
                     <button class="cat-btn" data-act="up"><i class="fas fa-chevron-up"></i></button>
                     <button class="cat-btn" data-act="down"><i class="fas fa-chevron-down"></i></button>
@@ -1314,19 +1468,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleHL() {
         const v = el.todoInput.value; 
+        
+        if (state.cancelAutoParse) {
+            el.inputHL.innerHTML = esc(v);
+            if (el.cancelAutoBtn) el.cancelAutoBtn.classList.add('hidden');
+            return;
+        }
+        
         const pr = parseDate(v);
         
-        const routineMatch = v.match(/(매일|이틀마다|3일마다|매주\s*[월화수목금토일]요일|매달\s*\d{1,2}일|매달\s*[첫둘셋넷마지막]+주\s*[월화수목금토일]요일)(마다)?/);
+        const routineMatch = v.match(/(매일|이틀마다|격일|3일마다|삼일마다|매주\s*[월화수목금토일]요일|매달\s*\d{1,2}일|매달\s*[첫둘셋넷마지막]+주\s*[월화수목금토일]요일)(마다)?/);
         
         let toHighlight = [];
         if (pr.matched) toHighlight.push({ text: pr.matched, type: 'date' });
         if (pr.timeMatched) toHighlight.push({ text: pr.timeMatched, type: 'time' });
         if (routineMatch) toHighlight.push({ text: routineMatch[0], type: 'routine' });
 
+        const hashtagMatch = v.match(/#(\S+)/);
+        if (hashtagMatch && !state.cancelAutoParse) {
+            const cName = hashtagMatch[1];
+            const foundCat = state.categories.find(c => c.name === cName);
+            if (foundCat) {
+                el.catSelect.value = foundCat.id; // Switch category actively
+                toHighlight.push({ text: hashtagMatch[0], type: 'routine' }); // Highlight hashtag
+            }
+        }
+
         // Remove duplicates and overlaps
         toHighlight = toHighlight.filter((item, index) => {
             return toHighlight.findIndex(h => h.text === item.text) === index;
         });
+
+        if (el.cancelAutoBtn) {
+            el.cancelAutoBtn.classList.toggle('hidden', toHighlight.length === 0);
+        }
 
         // Sort by position in string
         const highlightsWithPos = toHighlight.map(h => ({ ...h, pos: v.indexOf(h.text) }))
@@ -1425,13 +1600,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const dailyGroup = allRoutines.filter(r => {
             const type = typeof r.recurrence === 'string' ? r.recurrence : r.recurrence.type;
-            const hasDays = typeof r.recurrence === 'object' && r.recurrence.days?.length > 0;
-            return !['weekly', 'monthly'].includes(type) || hasDays;
+            return type === 'daily' || type === 'everyday';
         });
         const advancedGroup = allRoutines.filter(r => {
             const type = typeof r.recurrence === 'string' ? r.recurrence : r.recurrence.type;
-            const hasDays = typeof r.recurrence === 'object' && r.recurrence.days?.length > 0;
-            return (['weekly', 'monthly'].includes(type)) && !hasDays;
+            return type !== 'daily' && type !== 'everyday';
         });
 
         const renderRoutRow = (r, isAdvanced = false) => {
@@ -1443,7 +1616,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let typeLabel = '';
             if (isWeekly) typeLabel = '주간';
             else if (isMonthly) typeLabel = '월간';
-            else if (type === 'every2days') typeLabel = '2일';
+            else if (type === 'every2days') typeLabel = '격일';
             else if (type === 'every3days') typeLabel = '3일';
             else if (['mon','tue','wed','thu','fri','sat','sun'].includes(type)) typeLabel = dayNames[['sun','mon','tue','wed','thu','fri','sat'].indexOf(type)];
 
@@ -1456,19 +1629,50 @@ document.addEventListener('DOMContentLoaded', () => {
             const delBtn = state.hgEditMode ? `${catSelect}<i class="fas fa-minus-circle hg-del-btn" data-rid="${r.id}"></i>` : '';
 
             if (isAdvanced) {
-                // Pill style centered
-                const isDone = state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt) >= days[0] && new Date(t.completedAt) <= days[6]);
-                const row = document.createElement('div');
-                row.className = 'hg-pill-row';
-                row.innerHTML = `
-                    <div class="hg-label">${delBtn}${typeBadge}${esc(r.text)}</div>
-                    <div class="hg-pill-container">
-                        <div class="hg-cell pill ${isDone?'done':''}" data-rid="${r.id}" data-day="${days[3].toISOString()}" data-weekly="true">
-                            ${isDone?'<i class="fas fa-check"></i>':''}
+                const hasDays = typeof rect === 'object' && rect.days?.length > 0;
+                if (hasDays) {
+                    const row = document.createElement('div');
+                    row.className = 'hg-row';
+                    let rowBody = `<div class="hg-label">${delBtn}${typeBadge}${esc(r.text)}</div>`;
+                    days.forEach(day => {
+                        let cellDisabled = false;
+                        if (!rect.days.includes(day.getDay())) cellDisabled = true;
+                        
+                        const done = state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === day.toDateString());
+                        if (cellDisabled) rowBody += `<div class="hg-cell disabled" style="opacity:0.2; pointer-events:none;"></div>`;
+                        else rowBody += `<div class="hg-cell ${done?'done':''}" data-rid="${r.id}" data-day="${day.toISOString()}">${done?'<i class="fas fa-check"></i>':''}</div>`;
+                    });
+                    row.innerHTML = rowBody;
+                    return row;
+                } else {
+                    let pillCount = 1;
+                    if (type === 'every2days') pillCount = 4;
+                    else if (type === 'every3days') pillCount = 3;
+                    
+                    const weekStarts = new Date(days[0]); weekStarts.setHours(0,0,0,0);
+                    const weekEnds = new Date(days[6]); weekEnds.setHours(23,59,59,999);
+                    const completions = state.tasks.filter(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt) >= weekStarts && new Date(t.completedAt) <= weekEnds).length;
+                    
+                    let pillsHTML = '';
+                    for (let i = 0; i < pillCount; i++) {
+                        const isDone = i < completions;
+                        pillsHTML += `
+                            <div class="hg-cell pill ${isDone?'done':''}" data-rid="${r.id}" data-day="${days[3].toISOString()}" data-weekly="true">
+                                ${isDone?'<i class="fas fa-check"></i>':''}
+                            </div>
+                        `;
+                    }
+                    
+                    const row = document.createElement('div');
+                    row.className = 'hg-pill-row';
+                    row.innerHTML = `
+                        <div class="hg-label">${delBtn}${typeBadge}${esc(r.text)}</div>
+                        <div class="hg-pill-container" style="${pillCount > 1 ? 'display:flex; gap:6px;' : ''}">
+                            ${pillsHTML}
                         </div>
-                    </div>
-                `;
-                return row;
+                    `;
+                    return row;
+                }
             } else {
                 // Standard 7-day row
                 const row = document.createElement('div');
@@ -1585,12 +1789,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isWeekly) {
                     const weekStarts = new Date(days[0]); weekStarts.setHours(0,0,0,0);
                     const weekEnds = new Date(days[6]); weekEnds.setHours(23,59,59,999);
-                    const completionsInWeek = state.tasks.filter(t => t.originalRoutineId == rid && t.status === 'completed' && new Date(t.completedAt) >= weekStarts && new Date(t.completedAt) <= weekEnds);
-                    if (completionsInWeek.length > 0) {
-                        state.tasks = state.tasks.filter(t => !completionsInWeek.includes(t));
-                    } else {
+                    let completionsInWeek = state.tasks.filter(t => t.originalRoutineId == rid && t.status === 'completed' && new Date(t.completedAt) >= weekStarts && new Date(t.completedAt) <= weekEnds);
+                    
+                    const elIsDone = cell.classList.contains('done');
+                    
+                    if (elIsDone && completionsInWeek.length > 0) {
+                        completionsInWeek.sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt));
+                        const latest = completionsInWeek[0];
+                        state.tasks = state.tasks.filter(t => t.id !== latest.id);
+                    } else if (!elIsDone) {
                         const rt = state.tasks.find(x => x.id == rid);
-                        if (rt) state.tasks.push({ ...rt, id: Date.now()+'h', originalRoutineId: rid, status: 'completed', completedAt: new Date(cell.dataset.day).toISOString(), isRoutineHistory: true });
+                        if (rt) state.tasks.push({ ...rt, id: Date.now()+'h', originalRoutineId: rid, status: 'completed', completedAt: new Date().toISOString(), isRoutineHistory: true });
                     }
                 } else {
                     const ex = state.tasks.find(t => t.originalRoutineId == rid && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds);
@@ -1726,36 +1935,35 @@ document.addEventListener('DOMContentLoaded', () => {
         const reminderDoneCount = reminderPool.filter(t => t.status === 'completed').length;
         const reminderTotal = reminderPool.length;
         
+        const getDailyDoneCount = (ds, dt) => {
+            let totalCredit = 0;
+            pool.forEach(r => {
+                const rt = typeof r.recurrence === 'string' ? r.recurrence : (r.recurrence?.type || '');
+                if (['every2days', 'every3days'].includes(rt) || (typeof r.recurrence === 'object' && r.recurrence.days?.length > 0)) {
+                    if (state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds)) totalCredit += 1;
+                } else if (rt === 'weekly') {
+                    const start = new Date(days[0]); start.setHours(0,0,0,0);
+                    const end = new Date(days[6]); end.setHours(23,59,59,999);
+                    if (state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt) >= start && new Date(t.completedAt) <= end)) totalCredit += 1;
+                } else {
+                    if (state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds)) totalCredit += 1;
+                }
+            });
+            return totalCredit;
+        };
+
         const rates = days.map(day => {
             const ds = day.toDateString();
             const totalItems = pool.length + reminderTotal;
             if (!totalItems) return 0;
-            
-            const routineDone = pool.filter(r => {
-                if (r.recurrence === 'weekly') {
-                    const start = new Date(days[0]); start.setHours(0,0,0,0);
-                    const end = new Date(days[6]); end.setHours(23,59,59,999);
-                    return state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt) >= start && new Date(t.completedAt) <= end);
-                } else {
-                    return state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds);
-                }
-            }).length;
-            
+            const routineDone = getDailyDoneCount(ds, day);
             return ((routineDone + reminderDoneCount) / totalItems) * 100;
         });
 
         const routineRates = days.map(day => {
             const ds = day.toDateString();
             if (!pool.length) return 0;
-            const routineDone = pool.filter(r => {
-                if (r.recurrence === 'weekly') {
-                    const start = new Date(days[0]); start.setHours(0,0,0,0);
-                    const end = new Date(days[6]); end.setHours(23,59,59,999);
-                    return state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt) >= start && new Date(t.completedAt) <= end);
-                } else {
-                    return state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds);
-                }
-            }).length;
+            const routineDone = getDailyDoneCount(ds, day);
             return (routineDone / pool.length) * 100;
         });
 

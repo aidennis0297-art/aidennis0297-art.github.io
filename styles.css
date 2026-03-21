@@ -233,8 +233,72 @@ body { background: var(--bg); color: var(--text); overflow: hidden; height: 100v
     background: #ccc !important;
     border: 3px solid #000 !important;
     border-left-width: 12px !important;
-    animation: intenseShake 0.5s infinite;
 }
+
+/* === KEYBOARD SHORTCUTS UI === */
+.shortcuts-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 14px;
+}
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--hover);
+    border-radius: 8px;
+}
+.kb-key {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text);
+    box-shadow: 0 2px 0 var(--border);
+    font-family: inherit;
+    min-width: 32px;
+    text-align: center;
+}
+.kb-desc {
+    font-size: 0.85rem;
+    color: var(--text2);
+    font-weight: 500;
+}
+
+/* KB Focus Styles */
+body.hide-shortcuts .sidebar-kb-key { display: none !important; }
+.kb-focus {
+    outline: 2px solid var(--blue) !important;
+    outline-offset: 1px;
+    transform: translateY(-1.5px) scale(1.01);
+    box-shadow: 0 4px 15px rgba(0, 122, 255, 0.25) !important;
+    z-index: 10;
+}
+[data-theme='dark'] .kb-focus { outline-color: var(--blue); box-shadow: 0 4px 20px rgba(10, 132, 255, 0.4) !important; }
+
+/* Sidebar KB Key indicators */
+.sidebar-kb-key {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 5px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--text2);
+    box-shadow: 0 1px 0 var(--border);
+    font-family: inherit;
+    min-width: 18px;
+    text-align: center;
+    margin-left: auto;
+}
+.nav-item:hover .sidebar-kb-key {
+    display: none;
+}
+
 
 .item-actions{display:flex;gap:4px;opacity:0;transition:opacity .15s}
 .todo-item:hover .item-actions, .item-actions.visible{opacity:1}
@@ -288,7 +352,9 @@ body { background: var(--bg); color: var(--text); overflow: hidden; height: 100v
 .input-highlights{position:absolute;inset:0;padding:10px 14px;pointer-events:none;font:inherit;font-size:.9rem;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;overflow:hidden;color:transparent}
 .highlight-bg{background:var(--blue-bg);border-radius:4px;padding:2px 0;color:var(--blue);font-weight:600}
 .highlight-bg-red{background:rgba(255,59,48,0.12);border-radius:4px;padding:2px 0;color:var(--red);font-weight:700;text-shadow:0 0 5px rgba(255,59,48,0.2)}
-#todo-input{width:100%;border:none;outline:none;padding:10px 14px;font-size:.9rem;font-family:inherit;background:transparent;position:relative;z-index:1;color:var(--text);}
+#todo-input{width:100%;border:none;outline:none;padding:10px 36px 10px 14px;font-size:.9rem;font-family:inherit;background:transparent;position:relative;z-index:1;color:var(--text);}
+.cancel-auto-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:var(--hover);border:none;color:var(--text2);width:20px;height:20px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:5;font-size:.65rem;transition:0.2s;}
+.cancel-auto-btn:hover{background:var(--border);color:var(--text);transform:translateY(-50%) scale(1.1);}
 #add-btn {width:34px;height:34px;border-radius:50%;background:var(--blue);color:white;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s;flex-shrink:0}
 #add-btn:hover{background:var(--blue);transform:scale(1.1);box-shadow: 0 0 10px rgba(0, 122, 255, 0.4)}
 
