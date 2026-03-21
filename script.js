@@ -200,46 +200,84 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 800);
     };
 
+    let isInitialLoad = true;
     function loadDataFromCloud() {
         if (!currentUser) return;
         el.authLoading.classList.remove('hidden'); // Show loading while fetching state
         
-        db.ref('users/' + currentUser.uid + '/state').once('value')
-            .then(snapshot => {
-                const data = snapshot.val();
-                if (data) {
-                    state = {
-                        categories: data.categories || [],
-                        tasks: data.tasks || [],
-                        victoryLog: data.victoryLog || [],
-                        currentView: 'super-routine',
-                        reward: data.reward || '',
-                        rewardTarget: data.rewardTarget || '100',
-                        editMode: false,
-                        theme: data.theme || 'light',
-                        calendarData: data.calendarData || {},
-                        isOverdoseMode: data.isOverdoseMode || false,
-                        isEEEnabled: data.isEEEnabled || false
-                    };
-                }
-                
-                // Ensure default categories exist if corrupted
-                if (!state.categories || state.categories.length === 0) {
-                     state.categories = [
-                        { id: 'cat_school', name: '학교', color: '#ff3b30' },
-                        { id: 'cat_life', name: '생활', color: '#34c759' },
-                        { id: 'cat_project', name: '프로젝트', color: '#5856d6' }
-                    ];
-                }
-                
+        db.ref('users/' + currentUser.uid + '/state').on('value', snapshot => {
+            const data = snapshot.val();
+            if (data) {
+                state = {
+                    categories: data.categories || [],
+                    tasks: data.tasks || [],
+                    victoryLog: data.victoryLog || [],
+                    currentView: state.currentView || 'super-routine',
+                    reward: data.reward || '',
+                    rewardTarget: data.rewardTarget || '100',
+                    editMode: state.editMode,
+                    theme: data.theme || 'light',
+                    calendarData: data.calendarData || {},
+                    isOverdoseMode: data.isOverdoseMode || false,
+                    isEEEnabled: data.isEEEnabled || false
+                };
+            }
+            
+            // Ensure default categories exist if corrupted
+            if (!state.categories || state.categories.length === 0) {
+                 state.categories = [
+                    { id: 'cat_school', name: '학교', color: '#ff3b30' },
+                    { id: 'cat_life', name: '생활', color: '#34c759' },
+                    { id: 'cat_project', name: '프로젝트', color: '#5856d6' }
+                ];
+            }
+            
+            if (isInitialLoad) {
                 el.authLoading.classList.add('hidden');
                 initAppUI();
-            })
-            .catch(err => {
+                isInitialLoad = false;
+            } else {
+                // Not initial load, just update UI
+                renderSidebar();
+                updateDropdown();
+                renderTasks();
+                updateBadges();
+                if (state.currentView === 'victory-log' && typeof renderVictoryLog === 'function') renderVictoryLog();
+                if (state.currentView === 'calendar' && typeof initCalendarView === 'function') initCalendarView();
+                if (state.currentView === 'super-routine' && typeof renderHabitGrid === 'function') {
+                    renderHabitGrid();
+                    renderChart();
+                }
+            }
+        }, err => {
+            if (isInitialLoad) {
                 el.authLoading.classList.add('hidden');
                 alert("데이터를 불러오지 못했습니다: " + err.message);
                 console.error(err);
+            }
+        });
+    }
+
+    function getCompletedRoutineInPeriod(r, targetDate) {
+        if (!r.isRoutine || r.isRoutineHistory) return null;
+        const rect = r.recurrence;
+        const type = typeof rect === 'string' ? rect : (rect?.type || '');
+        if (type === 'weekly' && !(typeof rect === 'object' && rect.days && rect.days.length > 0)) {
+            const day = targetDate.getDay();
+            const diff = (day === 0 ? -6 : 1) - day;
+            const weekStarts = new Date(targetDate); weekStarts.setDate(targetDate.getDate() + diff); weekStarts.setHours(0,0,0,0);
+            const weekEnds = new Date(weekStarts); weekEnds.setDate(weekStarts.getDate() + 6); weekEnds.setHours(23,59,59,999);
+            return state.tasks.find(x => x.originalRoutineId === r.id && x.status === 'completed' && new Date(x.completedAt) >= weekStarts && new Date(x.completedAt) <= weekEnds);
+        } else if (type === 'monthly' && !(typeof rect === 'object' && (rect.subType === 'date' || rect.subType === 'relative'))) {
+            return state.tasks.find(x => {
+                if (x.originalRoutineId !== r.id || x.status !== 'completed') return false;
+                const d = new Date(x.completedAt);
+                return d.getFullYear() === targetDate.getFullYear() && d.getMonth() === targetDate.getMonth();
             });
+        } else {
+            const ts = targetDate.toDateString();
+            return state.tasks.find(x => x.originalRoutineId === r.id && x.status === 'completed' && new Date(x.completedAt).toDateString() === ts);
+        }
     }
 
 
@@ -516,9 +554,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const eeBtn = $('ee-enable-btn');
         if (eeBtn) {
             eeBtn.onclick = () => {
-                state.isEEEnabled = !state.isEEEnabled;
-                save();
-                updateEEUI();
+                if (!state.isEEEnabled) {
+                    openPrompt("이스터에그 해제", "보안코드를 입력하세요", (val) => {
+                        if (val === "서울시립대") {
+                            state.isEEEnabled = true;
+                            save();
+                            updateEEUI();
+                        } else if (val !== null && val !== "") {
+                            alert("코드가 올바르지 않습니다.");
+                        }
+                    });
+                } else {
+                    state.isEEEnabled = false;
+                    save();
+                    updateEEUI();
+                }
             };
         }
 
@@ -765,8 +815,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function completeTask(t) {
         const now = new Date();
         if (t.isRoutine) {
-            const ts = now.toDateString();
-            const existing = state.tasks.find(x => x.originalRoutineId === t.id && x.status === 'completed' && new Date(x.completedAt).toDateString() === ts);
+            const existing = getCompletedRoutineInPeriod(t, now);
             
             if (existing) {
                 // Toggle OFF
@@ -944,8 +993,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Routines column
             let rightCol = '';
             if (routines.length) {
-                const todayStr = new Date().toDateString();
-                const done = routines.filter(r => state.tasks.some(x => x.originalRoutineId === r.id && x.status === 'completed' && new Date(x.completedAt).toDateString() === todayStr));
+                const now = new Date();
+                const done = routines.filter(r => !!getCompletedRoutineInPeriod(r, now));
                 const notDone = routines.filter(r => !done.includes(r));
                 if (notDone.length) {
                     rightCol += `<div class="history-cat-header"><i class="fas fa-sync-alt" style="color:var(--purple)"></i> 오늘의 루틴</div>`;
@@ -1034,8 +1083,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let cbStatus = '';
         if (t.isRoutine && !t.isRoutineHistory) {
-            // For active routines, check if completed TODAY — works in ALL views
-            const checked = state.tasks.some(x => x.originalRoutineId === t.id && x.status === 'completed' && new Date(x.completedAt).toDateString() === new Date().toDateString());
+            // Check if completed in its required period
+            const checked = !!getCompletedRoutineInPeriod(t, new Date());
             if (checked) cbStatus = 'cb-done';
         } else if (isDone) cbStatus = 'cb-done';
 
