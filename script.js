@@ -147,6 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         }
 
+
         if(el.logoutBtn) {
             el.logoutBtn.onclick = () => {
                 auth.signOut().then(() => {
