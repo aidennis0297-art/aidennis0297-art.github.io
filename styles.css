@@ -247,6 +247,8 @@ body { background: var(--bg); color: var(--text); overflow: hidden; height: 100v
 .act-btn.del:hover{color:var(--red)}
 
 /* Editing state */
+.cat-change-select{border:1px solid var(--blue);border-radius:4px;padding:2px 4px;font-size:0.75rem;background:var(--card);color:var(--text);outline:none;cursor:pointer;margin-right:4px}
+.hg-cat-select{border:1px solid var(--border);border-radius:4px;padding:2px;font-size:0.65rem;background:var(--hover);color:var(--text);outline:none;cursor:pointer;margin-right:6px}
 .inline-edit-input{width:100%;border:1px solid var(--blue);border-radius:4px;padding:3px 8px;font:inherit;font-size:.88rem;outline:none;background:var(--card)}
 .inline-edit-date{border:1px solid var(--blue);border-radius:4px;padding:2px 6px;font:inherit;font-size:.72rem;outline:none;margin-left:4px;position:absolute;z-index:10;background:var(--card);left:0;top:20px}
 .inline-rename{width:100%;border:1px solid var(--blue);border-radius:4px;padding:2px 6px;font:inherit;font-size:.85rem;outline:none;background:var(--card)}

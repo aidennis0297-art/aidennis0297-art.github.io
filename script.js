@@ -574,6 +574,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Global list delegation
         el.todoList.onclick = handleListClick;
+        el.todoList.addEventListener('change', e => {
+            if (e.target.classList.contains('cat-change-select')) {
+                const item = e.target.closest('.todo-item');
+                const t = state.tasks.find(x => x.id === item.dataset.id);
+                if (t) {
+                    t.categoryId = e.target.value;
+                    save(); renderTasks(); renderSidebar();
+                }
+            }
+        });
     }
 
     // --- MODAL SYSTEM ---
@@ -1060,7 +1070,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const isDone = t.status === 'completed';
         const isSR = state.currentView === 'super-routine';
         let meta = '';
-        if (t.isRoutine && !t.isRoutineHistory) meta += `<span class="meta-tag routine"><i class="fas fa-sync-alt"></i> 루틴</span>`;
+        if (t.isRoutine) {
+            let rText = '루틴';
+            if (t.recurrence) {
+                const rect = t.recurrence;
+                const dayNamesKO = ['일', '월', '화', '수', '목', '금', '토'];
+                const dayEngToKo = { 'mon':'월', 'tue':'화', 'wed':'수', 'thu':'목', 'fri':'금', 'sat':'토', 'sun':'일' };
+                const type = typeof rect === 'string' ? rect : (rect.type || '');
+                if (type === 'daily') rText = `매일${rect.time ? ' ' + rect.time : ''}`;
+                else if (type === 'every2days') rText = '이틀마다';
+                else if (type === 'every3days') rText = '3일마다';
+                else if (type === 'weekly') {
+                    if (typeof rect === 'object' && rect.days && rect.days.length > 0) {
+                        rText = `매주 ${rect.days.map(d => dayNamesKO[d]).join(', ')}요일`;
+                    } else rText = '매주';
+                } else if (dayEngToKo[type]) {
+                    rText = `매주 ${dayEngToKo[type]}요일`;
+                } else if (type === 'monthly') {
+                    if (typeof rect === 'object' && rect.subType === 'date') rText = `매월 ${rect.day}일`;
+                    else if (typeof rect === 'object' && rect.subType === 'relative') {
+                        const wNames = ['첫째주', '둘째주', '셋째주', '넷째주', '마지막주'];
+                        const w = wNames[rect.weekNum - 1] || `${rect.weekNum}째주`;
+                        rText = `매월 ${w} ${dayNamesKO[rect.dayName]}요일`;
+                    } else rText = '매월';
+                }
+            }
+            meta += `<span class="meta-tag routine"><i class="fas fa-sync-alt"></i> ${rText}</span>`;
+        }
         
         // Hide "until tomorrow" labels for daily routines
         if (t.dueDate && !isDone && !t.isRoutine) {
@@ -1087,6 +1123,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const checked = !!getCompletedRoutineInPeriod(t, new Date());
             if (checked) cbStatus = 'cb-done';
         } else if (isDone) cbStatus = 'cb-done';
+        
+        if (isDone && t.completedAt && !t.isRoutineHistory) {
+            const cd = new Date(t.completedAt);
+            const cLabel = cd.toLocaleDateString('ko-KR', { year: '2-digit', month: 'short', day: 'numeric' });
+            meta += `<span class="meta-tag"><i class="fas fa-check"></i> ${cLabel} 완료</span>`;
+        }
 
         let glowClass = '';
         if (t.dueDate && !isDone && !t.isRoutine) {
@@ -1098,8 +1140,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let acts = '';
         if (state.editMode) {
+            let catOptions = state.categories.map(c => `<option value="${c.id}" ${c.id===t.categoryId?'selected':''}>${esc(c.name)}</option>`).join('');
             acts = `
             <div class="item-actions visible">
+                <select class="cat-change-select">${catOptions}</select>
                 <button class="act-btn" data-act="move" data-dir="up"><i class="fas fa-chevron-up"></i></button>
                 <button class="act-btn" data-act="move" data-dir="down"><i class="fas fa-chevron-down"></i></button>
                 <button class="act-btn del" data-act="delete"><i class="fas fa-trash"></i></button>
@@ -1329,7 +1373,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- 리마인더 섹션 (새 컨테이너 sr-reminders-list 사용) ---
         const reminderList = $('sr-reminders-list');
         if (reminderList) reminderList.innerHTML = '';
-        const reminders = state.tasks.filter(t => t.status === 'active' && !t.isRoutine && !t.isRoutineHistory);
+        const reminders = state.tasks.filter(t => t.status === 'active' && !t.isRoutine && !t.isRoutineHistory && t.text !== "");
         if (reminders.length > 0 && reminderList) {
             reminders.forEach(r => {
                 let dueMeta = '';
@@ -1343,7 +1387,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     else if (d.toDateString() === tmr2.toDateString()) { label = '내일까지'; urgent = true; }
                     dueMeta = `<span class="hg-reminder-due ${urgent?'urgent':''}"><i class="far fa-calendar"></i> ${label}</span>`;
                 }
-                const delBtn2 = state.hgEditMode ? `<i class="fas fa-minus-circle hg-del-btn" data-rid="${r.id}" data-is-reminder="true"></i>` : '';
+                let catSelect2 = '';
+                if (state.hgEditMode) {
+                    const opts = state.categories.map(c => `<option value="${c.id}" ${c.id===r.categoryId?'selected':''}>${esc(c.name)}</option>`).join('');
+                    catSelect2 = `<select class="hg-cat-select" data-rid="${r.id}">${opts}</select>`;
+                }
+                const delBtn2 = state.hgEditMode ? `${catSelect2}<i class="fas fa-minus-circle hg-del-btn" data-rid="${r.id}" data-is-reminder="true"></i>` : '';
                 const row = document.createElement('div');
                 row.className = 'hg-reminder-row';
                 row.dataset.rid = r.id;
@@ -1399,7 +1448,12 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (['mon','tue','wed','thu','fri','sat','sun'].includes(type)) typeLabel = dayNames[['sun','mon','tue','wed','thu','fri','sat'].indexOf(type)];
 
             const typeBadge = typeLabel ? `<span class="hg-type-badge">${typeLabel}</span>` : '';
-            const delBtn = state.hgEditMode ? `<i class="fas fa-minus-circle hg-del-btn" data-rid="${r.id}"></i>` : '';
+            let catSelect = '';
+            if (state.hgEditMode) {
+                const opts = state.categories.map(c => `<option value="${c.id}" ${c.id===r.categoryId?'selected':''}>${esc(c.name)}</option>`).join('');
+                catSelect = `<select class="hg-cat-select" data-rid="${r.id}">${opts}</select>`;
+            }
+            const delBtn = state.hgEditMode ? `${catSelect}<i class="fas fa-minus-circle hg-del-btn" data-rid="${r.id}"></i>` : '';
 
             if (isAdvanced) {
                 // Pill style centered
@@ -1581,6 +1635,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             };
         });
+
+        // --- 루틴/리마인더 카테고리 변경 처리 ---
+        (el.habitGrid || document).querySelectorAll('.hg-cat-select').forEach(sel => {
+            sel.onchange = (e) => {
+                const rid = sel.dataset.rid;
+                const t = state.tasks.find(x => x.id == rid);
+                if (t) {
+                    t.categoryId = e.target.value;
+                    save(); renderHabitGrid(); renderTasks(); renderSidebar(); updateDropdown();
+                }
+            };
+        });
+        (reminderList || document).querySelectorAll('.hg-cat-select').forEach(sel => {
+            sel.onchange = (e) => {
+                const rid = sel.dataset.rid;
+                const t = state.tasks.find(x => x.id == rid);
+                if (t) {
+                    t.categoryId = e.target.value;
+                    save(); renderHabitGrid(); renderTasks(); renderSidebar(); updateDropdown();
+                }
+            };
+        });
     }
 
     function renderVictoryLog() {
@@ -1668,8 +1744,34 @@ document.addEventListener('DOMContentLoaded', () => {
             return ((routineDone + reminderDoneCount) / totalItems) * 100;
         });
 
+        const routineRates = days.map(day => {
+            const ds = day.toDateString();
+            if (!pool.length) return 0;
+            const routineDone = pool.filter(r => {
+                if (r.recurrence === 'weekly') {
+                    const start = new Date(days[0]); start.setHours(0,0,0,0);
+                    const end = new Date(days[6]); end.setHours(23,59,59,999);
+                    return state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt) >= start && new Date(t.completedAt) <= end);
+                } else {
+                    return state.tasks.some(t => t.originalRoutineId === r.id && t.status === 'completed' && new Date(t.completedAt).toDateString() === ds);
+                }
+            }).length;
+            return (routineDone / pool.length) * 100;
+        });
+
+        const reminderRatesList = days.map(day => {
+            const endOfDay = new Date(day); endOfDay.setHours(23,59,59,999);
+            const done = reminderPool.filter(t => t.status === 'completed' && new Date(t.completedAt) <= endOfDay).length;
+            return reminderTotal ? (done / reminderTotal) * 100 : 0;
+        });
+
         const weeklyAvg = rates.length ? Math.round(rates.reduce((a,b)=>a+b,0)/7) : 0;
-        if(el.todayRate) el.todayRate.textContent = `이번 주 평균 달성: ${weeklyAvg}%`;
+        const weeklyAvgRout = routineRates.length ? Math.round(routineRates.reduce((a,b)=>a+b,0)/7) : 0;
+        const weeklyAvgRem = reminderRatesList.length ? Math.round(reminderRatesList.reduce((a,b)=>a+b,0)/7) : 0;
+
+        if(el.todayRate) {
+            el.todayRate.innerHTML = `평균 달성 &nbsp;<span style="color:var(--text2)">|</span>&nbsp; 루틴 <span style="color:var(--blue)">${weeklyAvgRout}%</span> &nbsp;<span style="color:var(--text2)">|</span>&nbsp; 리마인더 <span style="color:var(--yellow)">${weeklyAvgRem}%</span>`;
+        }
         if(el.rewardChip) {
             el.rewardChip.classList.toggle('hidden', weeklyAvg < 100 || !state.reward);
             if(state.reward) el.rewardChip.innerHTML = `<i class="fas fa-gift"></i> ${esc(state.reward)}`;
@@ -1683,29 +1785,35 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
         }
         
-        const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + gh);
-        grad.addColorStop(0, 'rgba(0, 122, 255, 0.15)'); grad.addColorStop(1, 'rgba(0, 122, 255, 0)');
-        ctx.beginPath();
-        rates.forEach((r, i) => {
-            const x = pad.l + (gw * i/6), y = pad.t + gh - (gh * r/100);
-            if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-        });
-        ctx.lineTo(pad.l+gw, pad.t+gh); ctx.lineTo(pad.l, pad.t+gh);
-        ctx.fillStyle = grad; ctx.fill();
+        const drawLine = (data, colorStr, fillStyleStr) => {
+            const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + gh);
+            grad.addColorStop(0, fillStyleStr); grad.addColorStop(1, 'rgba(255,255,255,0)');
+            
+            ctx.beginPath();
+            data.forEach((r, i) => {
+                const x = pad.l + (gw * i/6), y = pad.t + gh - (gh * r/100);
+                if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+            });
+            ctx.lineTo(pad.l+gw, pad.t+gh); ctx.lineTo(pad.l, pad.t+gh);
+            ctx.fillStyle = grad; ctx.fill();
 
-        ctx.beginPath(); ctx.strokeStyle = '#007aff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        rates.forEach((r, i) => {
-            const x = pad.l + (gw * i/6), y = pad.t + gh - (gh * r/100);
-            if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-        });
-        ctx.stroke();
+            ctx.beginPath(); ctx.strokeStyle = colorStr; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            data.forEach((r, i) => {
+                const x = pad.l + (gw * i/6), y = pad.t + gh - (gh * r/100);
+                if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+            });
+            ctx.stroke();
 
-        rates.forEach((r, i) => {
-            const x = pad.l + (gw * i/6), y = pad.t + gh - (gh * r/100);
-            ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2);
-            ctx.fillStyle = 'white'; ctx.fill();
-            ctx.strokeStyle = '#007aff'; ctx.lineWidth = 1.5; ctx.stroke();
-        });
+            data.forEach((r, i) => {
+                const x = pad.l + (gw * i/6), y = pad.t + gh - (gh * r/100);
+                ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+                ctx.fillStyle = state.theme === 'dark' ? '#1c1c1e' : 'white'; ctx.fill();
+                ctx.strokeStyle = colorStr; ctx.lineWidth = 1.5; ctx.stroke();
+            });
+        };
+
+        drawLine(reminderRatesList, '#ff9500', 'rgba(255, 149, 0, 0.15)'); // Yellow
+        drawLine(routineRates, '#007aff', 'rgba(0, 122, 255, 0.15)');      // Blue
 
         ctx.fillStyle = state.theme === 'dark' ? '#a1a1a6' : '#8e8e93';
         ctx.font = '600 10px Inter';
@@ -1738,8 +1846,8 @@ document.addEventListener('DOMContentLoaded', () => {
         diamond: ["....#....", "...###...", "..#####..", ".#######.", "#########", ".#######.", "..#####..", "...###...", "....#...."]
     };
     const CAL_SYMBOL_ORDER = ['empty', 'spade', 'o', 'x', 'heart', 'club', 'diamond'];
-    const CAL_FLASH_TEXTS = ['', 'KAWAII!', 'POP!', 'GLITCH!', 'CRASH!', 'OVERDOSE!', 'ANGEL!', 'WARNING!', 'DANGER!', 'MELTDOWN!'];
-    const CAL_BUBBLE_PHRASES = ["I AM INTERNET ANGEL", "OVERDOSE...", "Need more likes!", "Glitch in the matrix", "Do you love me?", "ERROR 404: Sleep", "Y2K FOREVER", "Too much neon!", "Tap me senpai", "MIND = BLOWN", "✝ BLESS ✝", "Pill time?", "Kawaii overload...", "System hacked.", "Notice me!", "10101010", "Dopamine hit!", "Loading happiness...", "Who designed this?", "Praise the Angel"];
+    const CAL_FLASH_TEXTS = ['', 'KAWAII!', 'POP!', 'GLITCH!', 'CRASH!', 'OVERDOSE!', 'EE!', 'WARNING!', 'DANGER!', 'MELTDOWN!'];
+    const CAL_BUBBLE_PHRASES = ["이스터에그", "OVERDOSE...", "Need more likes!", "Glitch in the matrix", "Do you love me?", "ERROR 404: Sleep", "Y2K FOREVER", "Too much neon!", "Tap me senpai", "MIND = BLOWN", "✝ BLESS ✝", "Pill time?", "Kawaii overload...", "System hacked.", "Notice me!", "10101010", "Dopamine hit!", "Loading happiness...", "Who designed this?", "이스터에그"];
 
     function initCalendarView() {
         if (calInitialized) { startCalAnimations(); return; }
@@ -1943,7 +2051,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Init
-        $('ee-manicText').innerText = "OVERDOSE ANGEL DIE LOVE NEED TRASH GLITCH ERROR INTERNET so hiiiiiiiigh SO HIIIIIIIIGH!!! ".repeat(250);
+        $('ee-manicText').innerText = "이스터에그 ".repeat(500);
         updateTheme();
         for (let i=0; i<80; i++) calParticles.push(new CalParticle());
         startCalAnimations();
