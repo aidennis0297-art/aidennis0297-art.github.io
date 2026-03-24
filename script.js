@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
         rewardInput: $('reward-input'), habitGrid: $('habit-grid'),
         achieveChart: $('achievement-chart'), todayRate: $('today-rate'),
         rewardChip: $('reward-display-chip'), editModeBtn: $('edit-mode-btn'),
+        aiReportBtn: $('ai-report-btn'), aiModal: $('ai-modal'), aiModalBody: $('ai-modal-body'), aiModalClose: $('ai-modal-close-btn'), aiModalConfirm: $('ai-modal-confirm-btn'),
         srEditBtn: $('sr-edit-btn'), modal: $('custom-modal'),
         settingsView: $('settings-view'), resetAllBtn: $('reset-all-btn'),
         themeToggleBtn: $('theme-toggle-btn'), logoutBtn: $('logout-btn'),
@@ -386,6 +387,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Custom Modal Wiring
         $('modal-cancel-btn').onclick = closeModal;
         $('modal-confirm-btn').onclick = submitModal;
+
+        // AI Report Modal Wiring
+        if (el.aiReportBtn) el.aiReportBtn.onclick = showAIReport;
+        if (el.aiModalClose) el.aiModalClose.onclick = () => el.aiModal.classList.add('hidden');
+        if (el.aiModalConfirm) el.aiModalConfirm.onclick = () => el.aiModal.classList.add('hidden');
 
         // Add Category
         if (el.addCatBtn) {
@@ -743,6 +749,158 @@ document.addEventListener('DOMContentLoaded', () => {
         cb(res);
     }
 
+    // --- AI REPORT LOGIC ---
+    function showAIReport() {
+        if (!el.aiModal) return;
+        el.aiModal.classList.remove('hidden');
+        el.aiModalBody.innerHTML = `
+            <div style="text-align:center; padding: 20px;">
+                <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--blue); margin-bottom: 10px;"></i>
+                <p>데이터를 분석하고 있습니다...</p>
+            </div>`;
+        
+        setTimeout(() => {
+            const now = new Date();
+            const lastWeek = new Date(now);
+            lastWeek.setDate(now.getDate() - 7);
+            
+            const routines = state.tasks.filter(t => t.isRoutine && !t.isRoutineHistory && t.status === 'active');
+            const history = state.tasks.filter(t => t.isRoutineHistory && t.status === 'completed' && new Date(t.completedAt) >= lastWeek);
+            
+            let totalExpected = 0;
+            let weakRoutines = [];
+            
+            routines.forEach(r => {
+                const rt = typeof r.recurrence === 'string' ? r.recurrence : (r.recurrence?.type || '');
+                let expected = 7;
+                if (rt === 'weekly') expected = 1;
+                else if (rt === 'every2days') expected = 3;
+                else if (rt === 'every3days') expected = 2;
+                else if (rt === 'monthly') expected = 0; 
+                
+                totalExpected += expected;
+                const doneCount = history.filter(h => h.originalRoutineId === r.id).length;
+                
+                if (expected > 0 && (doneCount / expected) < 0.5) {
+                    weakRoutines.push({ id: r.id, name: r.text, rate: Math.round((doneCount/expected)*100) });
+                }
+            });
+            
+            const overallRate = totalExpected > 0 ? Math.round((history.length / totalExpected) * 100) : 0;
+            
+            // 1. Reward Balance Evaluation
+            let rewardFeedback = '';
+            if (!state.reward) {
+                if (routines.length >= 3) rewardFeedback = '루틴 목표는 세워졌는데 보상이 없네요! <strong>이번 주 나만의 약속</strong>을 꼭 설정해 보세요.';
+                else rewardFeedback = '설정된 보상이 없습니다. 작은 보상 하나를 걸고 시작해 볼까요?';
+            } else {
+                if (routines.length <= 2) rewardFeedback = `현재 루틴 갯수에 비해 '${esc(state.reward)}' 보상은 꽤 커 보입니다! 동기부여가 잘 되겠네요.`;
+                else if (routines.length >= 7) rewardFeedback = `루틴이 무려 ${routines.length}개나 됩니다! '${esc(state.reward)}' 보상을 위해 열심히 달릴 준비 되셨나요?`;
+                else rewardFeedback = `'${esc(state.reward)}' 보상을 향한 이번 주 계획 밸런스가 좋습니다!`;
+            }
+
+            // 2. Interactive Analysis for Weak Routine
+            let interactiveHtml = '';
+            let targetRoutine = weakRoutines.length > 0 ? weakRoutines[0] : null;
+
+            if (targetRoutine) {
+                interactiveHtml = `
+                <div style="margin-top:20px; border-left:4px solid var(--purple); padding:10px 15px; background:var(--bg2); border-radius:8px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <i class="fas fa-search text-purple" style="font-size:1.2rem;"></i>
+                        <strong style="font-size:1.05rem;">집중 분석: ${esc(targetRoutine.name)}</strong>
+                    </div>
+                    <p style="margin-top:8px; font-size:0.9rem; color:var(--text); line-height:1.4;">
+                        지난주 이 항목의 달성률이 <strong>${targetRoutine.rate}%</strong>에 그쳤습니다. 실천하기 가장 어려웠던 원인이 무엇인가요?
+                    </p>
+                    <div id="ai-action-container" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;">
+                        <button class="ai-cause-btn" data-id="${targetRoutine.id}" data-cause="time" style="flex:1; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg1); cursor:pointer; font-weight:600; font-size:0.85rem;">시간 부족 ⏳</button>
+                        <button class="ai-cause-btn" data-id="${targetRoutine.id}" data-cause="energy" style="flex:1; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg1); cursor:pointer; font-weight:600; font-size:0.85rem;">체력 방전 🔋</button>
+                        <button class="ai-cause-btn" data-id="${targetRoutine.id}" data-cause="motivation" style="flex:1; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg1); cursor:pointer; font-weight:600; font-size:0.85rem;">귀찮음 🎯</button>
+                    </div>
+                </div>`;
+            } else {
+                interactiveHtml = `
+                <div style="margin-top:20px; background:rgba(0,122,255,0.1); padding:15px; border-radius:8px; text-align:center; color:var(--blue);">
+                    <i class="fas fa-thumbs-up" style="font-size:1.5rem; margin-bottom:8px;"></i>
+                    <p style="margin:0; font-size:0.95rem; font-weight:600;">진단할 부진 루틴이 없습니다. 완벽해요!</p>
+                </div>`;
+            }
+
+            el.aiModalBody.innerHTML = `
+                <div style="text-align:center; margin-bottom:15px;">
+                    <div style="font-size:3rem; margin-bottom:5px;">${overallRate >= 80 ? '🔥' : overallRate >= 50 ? '💪' : '🌱'}</div>
+                    <h4 style="margin:0; font-size:1.1rem;">지난주 달성률 <span style="color:var(--blue); font-size:1.3rem; margin-left:5px;">${Math.min(100, overallRate)}%</span></h4>
+                </div>
+                
+                <div style="background:var(--blue-bg); color:var(--text); padding:12px 15px; border-radius:8px; font-size:0.9rem; line-height:1.5; margin-bottom:15px; display:flex; gap:12px; align-items:flex-start;">
+                    <i class="fas fa-gift text-blue" style="font-size:1.2rem; margin-top:2px;"></i>
+                    <div><strong>보상 밸런스 체크:</strong><br>${rewardFeedback}</div>
+                </div>
+
+                ${interactiveHtml}
+            `;
+
+            // Bind events for root cause buttons
+            setTimeout(() => {
+                const causeBtns = el.aiModalBody.querySelectorAll('.ai-cause-btn');
+                causeBtns.forEach(btn => {
+                    btn.onclick = () => {
+                        const cause = btn.dataset.cause;
+                        const tid = btn.dataset.id;
+                        const t = state.tasks.find(x => x.id == tid);
+                        if (!t) return;
+
+                        const container = el.aiModalBody.querySelector('#ai-action-container');
+                        if (cause === 'time') {
+                            container.innerHTML = `
+                                <div style="width:100%; border:1px solid var(--green); background:rgba(52,199,89,0.1); border-radius:6px; padding:12px; text-align:center;">
+                                    <p style="margin:0 0 10px 0; font-size:0.9rem;">부담을 줄이기 위해 일단 <strong>'5분만'</strong> 해보는 건 어떨까요? 루틴 이름에 '(5분만)'을 추가해 드릴게요.</p>
+                                    <button id="ai-apply-btn" class="btn btn-primary" style="width:100%;">이름 변경 적용하기</button>
+                                </div>
+                            `;
+                            el.aiModalBody.querySelector('#ai-apply-btn').onclick = () => {
+                                if(!t.text.includes('(5분만)')) t.text += ' (5분만)';
+                                save(); renderTasks(); renderSidebar();
+                                container.innerHTML = `<div style="text-align:center; color:var(--green); font-weight:bold; width:100%;"><i class="fas fa-check-circle"></i> 적용 완료!</div>`;
+                            };
+                        } else if (cause === 'energy') {
+                            container.innerHTML = `
+                                <div style="width:100%; border:1px solid var(--orange); background:rgba(255,149,0,0.1); border-radius:6px; padding:12px; text-align:center;">
+                                    <p style="margin:0 0 10px 0; font-size:0.9rem;">에너지가 많이 달린다면, 이번 주만 <strong>임시로 비활성화(보류)</strong> 해두고 쉴까요?</p>
+                                    <button id="ai-apply-btn" class="btn btn-primary" style="width:100%; background:var(--orange);">이번 주 비활성화</button>
+                                </div>
+                            `;
+                            el.aiModalBody.querySelector('#ai-apply-btn').onclick = () => {
+                                t.status = 'paused'; // or just soft delete from active routine list
+                                save(); renderTasks(); renderSidebar();
+                                container.innerHTML = `<div style="text-align:center; color:var(--orange); font-weight:bold; width:100%;"><i class="fas fa-pause-circle"></i> 비활성화 완료 (추후 설정에서 복구 가능)</div>`;
+                            };
+                        } else if (cause === 'motivation') {
+                            container.innerHTML = `
+                                <div style="width:100%; border:1px solid var(--purple); background:rgba(175,82,222,0.1); border-radius:6px; padding:12px; text-align:center;">
+                                    <p style="margin:0 0 10px 0; font-size:0.9rem;">이 루틴 완수만을 위한 <strong>작은 특별 보상</strong>을 이름 옆에 적어볼까요?</p>
+                                    <div style="display:flex; gap:8px;">
+                                        <input type="text" id="ai-reward-input" placeholder="예: + 커피 한잔" style="flex:1; padding:8px; border:1px solid var(--border); border-radius:6px;">
+                                        <button id="ai-apply-btn" class="btn btn-primary">추가</button>
+                                    </div>
+                                </div>
+                            `;
+                            const input = el.aiModalBody.querySelector('#ai-reward-input');
+                            input.focus();
+                            el.aiModalBody.querySelector('#ai-apply-btn').onclick = () => {
+                                if(input.value.trim()) t.text += ` [🎁 ${input.value.trim()}]`;
+                                save(); renderTasks(); renderSidebar();
+                                container.innerHTML = `<div style="text-align:center; color:var(--purple); font-weight:bold; width:100%;"><i class="fas fa-check-circle"></i> 추가 완료!</div>`;
+                            };
+                        }
+                    };
+                });
+            }, 10);
+            
+        }, 800);
+    }
+
     // --- VIEW LOGIC ---
     function setView(v) {
         state.currentView = v;
@@ -773,7 +931,12 @@ document.addEventListener('DOMContentLoaded', () => {
         el.todoList.classList.toggle('hidden', isSettings || isVictory || isCalendar);
         
         const isUserCat = !['all', 'super-routine', 'history', 'victory-log', 'trash', 'settings', 'calendar'].includes(v);
-        $('edit-view-actions').classList.toggle('hidden', !isUserCat);
+        $('edit-view-actions').classList.toggle('hidden', !isUserCat && v !== 'all');
+        
+        // AI Report button visibility: Show only in 'all' view
+        if (el.aiReportBtn) el.aiReportBtn.classList.toggle('hidden', v !== 'all');
+        // Edit mode button visibility: Show for user categories
+        if (el.editModeBtn) el.editModeBtn.classList.toggle('hidden', !isUserCat);
         
         // Month/Week Display for Super Routine
         if (isSR) {
@@ -1105,7 +1268,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return (a.order || 0) - (b.order || 0);
         });
         if (v === 'history') return activeTasks.filter(t => t.status === 'completed').sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt));
-        if (v === 'trash') return activeTasks.filter(t => t.status === 'deleted').sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+        if (v === 'trash') return activeTasks.filter(t => t.status === 'deleted' || t.status === 'paused').sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
         return activeTasks.filter(t => t.status === 'active' && t.categoryId === v && !t.isRoutineHistory).sort((a,b) => (a.order||0) - (b.order||0));
     }
 
@@ -1123,12 +1286,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const tasks = pool.filter(t => !t.isRoutine);
             const routines = pool.filter(t => t.isRoutine);
 
-            const urgent = [], warning = [], others = [];
+            const past = [], today = [], tmrList = [], warning = [], others = [];
             tasks.forEach(t => {
                 if (!t.dueDate) others.push(t);
                 else {
                     const d = new Date(t.dueDate);
-                    if (d <= tmr) urgent.push(t);
+                    if (d < now && d.toDateString() !== now.toDateString()) past.push(t);
+                    else if (d.toDateString() === now.toDateString()) today.push(t);
+                    else if (d.toDateString() === tmr.toDateString()) tmrList.push(t);
                     else if (d.toDateString() === dat.toDateString()) warning.push(t);
                     else others.push(t);
                 }
@@ -1136,12 +1301,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Two-column layout
             let leftCol = '';
-            if (urgent.length) {
-                leftCol += `<div class="history-cat-header urgent"><i class="fas fa-exclamation-circle"></i> 내일까지</div>`;
-                urgent.forEach(t => leftCol += tHTML(t));
+            if (past.length) {
+                leftCol += `<div class="history-cat-header" style="color:var(--red)"><i class="fas fa-history"></i> 지난 일정</div>`;
+                past.forEach(t => leftCol += tHTML(t));
+            }
+            if (today.length) {
+                leftCol += `<div class="history-cat-header urgent"><i class="fas fa-exclamation-circle"></i> 오늘까지</div>`;
+                today.forEach(t => leftCol += tHTML(t));
+            }
+            if (tmrList.length) {
+                leftCol += `<div class="history-cat-header warning"><i class="fas fa-clock"></i> 내일까지</div>`;
+                tmrList.forEach(t => leftCol += tHTML(t));
             }
             if (warning.length) {
-                leftCol += `<div class="history-cat-header warning"><i class="fas fa-clock"></i> 모레까지</div>`;
+                leftCol += `<div class="history-cat-header" style="color:var(--yellow)"><i class="fas fa-calendar-day"></i> 모레까지</div>`;
                 warning.forEach(t => leftCol += tHTML(t));
             }
             if (others.length) {
@@ -1155,16 +1328,21 @@ document.addEventListener('DOMContentLoaded', () => {
             // Routines column
             let rightCol = '';
             if (routines.length) {
-                const now = new Date();
-                const done = routines.filter(r => !!getCompletedRoutineInPeriod(r, now));
-                const notDone = routines.filter(r => !done.includes(r));
-                if (notDone.length) {
-                    rightCol += `<div class="history-cat-header"><i class="fas fa-sync-alt" style="color:var(--purple)"></i> 오늘의 루틴</div>`;
-                    notDone.forEach(t => rightCol += tHTML(t));
+                const dailyGroup = routines.filter(r => { const rt = typeof r.recurrence === 'string' ? r.recurrence : (r.recurrence?.type || ''); return rt === 'daily' || rt === 'everyday'; });
+                const weeklyGroup = routines.filter(r => { const rt = typeof r.recurrence === 'string' ? r.recurrence : (r.recurrence?.type || ''); return rt === 'weekly' || ['mon','tue','wed','thu','fri','sat','sun'].includes(rt) || rt === 'every2days' || rt === 'every3days'; });
+                const monthlyGroup = routines.filter(r => { const rt = typeof r.recurrence === 'string' ? r.recurrence : (r.recurrence?.type || ''); return rt === 'monthly'; });
+
+                if (dailyGroup.length) {
+                    rightCol += `<div class="history-cat-header"><i class="fas fa-sun" style="color:var(--purple)"></i> 일간 루틴</div>`;
+                    dailyGroup.forEach(t => rightCol += tHTML(t));
                 }
-                if (done.length) {
-                    rightCol += `<div class="history-cat-header" style="color:var(--green)"><i class="fas fa-check-double"></i> 완료된 루틴</div>`;
-                    done.forEach(t => rightCol += tHTML(t));
+                if (weeklyGroup.length) {
+                    rightCol += `<div class="history-cat-header"><i class="fas fa-calendar-week" style="color:var(--blue)"></i> 주간 루틴</div>`;
+                    weeklyGroup.forEach(t => rightCol += tHTML(t));
+                }
+                if (monthlyGroup.length) {
+                    rightCol += `<div class="history-cat-header"><i class="fas fa-calendar-alt" style="color:var(--green)"></i> 월간 루틴</div>`;
+                    monthlyGroup.forEach(t => rightCol += tHTML(t));
                 }
             } else {
                 rightCol = `<div class="empty-state"><i class="fas fa-bolt"></i><p>루틴 없음</p></div>`;
@@ -1284,6 +1462,10 @@ document.addEventListener('DOMContentLoaded', () => {
             meta += `<span class="meta-tag"><i class="fas fa-check"></i> ${cLabel} 완료</span>`;
         }
 
+        if (t.status === 'paused') {
+            meta += `<span class="meta-tag" style="color:var(--orange); font-weight:600;"><i class="fas fa-pause-circle"></i> 비활성화됨</span>`;
+        }
+
         let glowClass = '';
         if (t.dueDate && !isDone && !t.isRoutine) {
             const d = new Date(t.dueDate), now = new Date(); now.setHours(0,0,0,0);
@@ -1304,7 +1486,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
         } else {
             let inner = '';
-            if (t.status === 'completed' || t.status === 'deleted') {
+            if (t.status === 'completed' || t.status === 'deleted' || t.status === 'paused') {
                 inner += `<button class="act-btn restore-btn" data-act="restore" title="복구"><i class="fas fa-undo"></i></button>`;
             }
             if (t.status === 'deleted') {
@@ -1713,7 +1895,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!state.victoryLog.some(l => l.type === 'week-archive' && l.weekKey === prevWeekKey)) {
             // Archive the PREVIOUS week if it hasn't been archived yet
             const prevRoutines = state.tasks.filter(t => t.isRoutineHistory && t.status === 'completed' && new Date(t.completedAt) >= prevWeekStart && new Date(t.completedAt) < startOfThisWeek);
-            if (prevRoutines.length > 0) {
+            
+            // Collect prev reminders
+            const prevReminders = state.tasks.filter(t => {
+                if (t.isRoutine || t.isRoutineHistory || t.status === 'deleted') return false;
+                const dCheck = new Date(t.completedAt || t.dueDate || t.createdAt || 0);
+                return dCheck < startOfThisWeek;
+            });
+
+            if (prevRoutines.length > 0 || prevReminders.length > 0) {
+                const routineMap = {};
+                prevRoutines.forEach(pr => {
+                    const rtName = pr.text;
+                    routineMap[rtName] = (routineMap[rtName] || 0) + 1;
+                });
+                const routineChecklist = Object.keys(routineMap).map(k => ({ name: k, count: routineMap[k] }));
+                const reminderChecklist = prevReminders.map(r => ({ name: r.text, success: r.status === 'completed' }));
+                
+                // Archive logic
                 state.victoryLog.push({
                     id: Date.now(),
                     type: 'week-archive',
@@ -1721,8 +1920,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     date: new Date().toISOString(),
                     weekKey: prevWeekKey,
                     count: prevRoutines.length,
+                    routineChecklist: routineChecklist,
+                    reminderChecklist: reminderChecklist,
                     badge: 'WEEKLY ARCHIVE'
                 });
+                
+                // Delete old reminders
+                prevReminders.forEach(r => { r.status = 'deleted'; });
+                
                 save();
             }
         }
@@ -1894,13 +2099,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 color = 'var(--blue)';
             }
 
+            let checklistHtml = '';
+            if (log.type === 'week-archive') {
+                const hasDetailedData = (log.routineChecklist && log.routineChecklist.length) || (log.reminderChecklist && log.reminderChecklist.length);
+                
+                if (hasDetailedData) {
+                    if (log.routineChecklist && log.routineChecklist.length) {
+                        checklistHtml += `<div style="margin-top:8px; font-size:0.8rem; color:var(--text);"><strong style="color:var(--blue);"><i class="fas fa-sync-alt"></i> 루틴 달성</strong><br>${log.routineChecklist.map(r => `• ${esc(r.name)} ${r.count}회 달성`).join('<br>')}</div>`;
+                    }
+                    if (log.reminderChecklist && log.reminderChecklist.length) {
+                        checklistHtml += `<div style="margin-top:6px; font-size:0.8rem; color:var(--text);"><strong style="color:var(--yellow);"><i class="fas fa-bell"></i> 리마인더</strong><br>${log.reminderChecklist.map(r => `• ${esc(r.name)} ${r.success ? '(성공)' : '(미완료)'}`).join('<br>')}</div>`;
+                    }
+                } else {
+                    // Fallback for older data without checklist info
+                    checklistHtml = `<div style="margin-top:8px; font-size:0.75rem; color:var(--text2); font-style:italic;">상세 내역이 전송되지 않은 이전 기록입니다.</div>`;
+                }
+            }
+
             el.victoryList.innerHTML += `
                 <div class="victory-entry" style="border-left-color:${color}">
                     <div class="v-icon" style="background:${color}1a; color:${color}"><i class="fas ${icon}"></i></div>
-                    <div class="v-info">
+                    <div class="v-info" style="flex:1;">
                         <div class="v-title">${esc(log.title)}</div>
                         <div class="v-date">${dateStr}</div>
-                        ${log.count ? `<div style="font-size:0.75rem; color:var(--text2); margin-top:4px;"><i class="fas fa-check-circle"></i> 총 ${log.count}개의 루틴 달성</div>` : ''}
+                        ${log.count ? `<div style="font-size:0.75rem; color:var(--text2); margin-top:4px;"><i class="fas fa-check-circle"></i> 총 ${log.count}개의 실천 기록</div>` : ''}
+                        ${checklistHtml}
                     </div>
                     <div class="v-badge" style="background:${color}">${esc(log.badge)}</div>
                 </div>

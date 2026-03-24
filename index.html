@@ -152,6 +152,7 @@
                     <p id="date-display"></p>
                 </div>
                 <div class="header-right" id="edit-view-actions">
+                    <button class="ui-edit-btn" id="ai-report-btn" style="background-color: var(--blue); color: white; border: none; margin-right: 8px;"><i class="fas fa-lightbulb"></i> AI 분석</button>
                     <button class="ui-edit-btn" id="edit-mode-btn"><i class="fas fa-pen"></i> 수정하기</button>
                 </div>
             </header>
@@ -457,6 +458,25 @@
             <div class="modal-footer">
                 <button id="modal-cancel-btn" class="modal-btn secondary">취소</button>
                 <button id="modal-confirm-btn" class="modal-btn primary">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Report Modal -->
+    <div id="ai-modal" class="custom-modal-overlay hidden">
+        <div class="modal-content" style="max-width: 500px; width: 90%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 id="ai-modal-heading" style="margin: 0; color: var(--blue);"><i class="fas fa-magic"></i> 주간 AI 리포트</h3>
+                <button id="ai-modal-close-btn" style="background:none; border:none; font-size: 1.2rem; cursor:pointer; color: var(--text2);"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="ai-modal-body" style="font-size: 0.95rem; line-height: 1.6; color: var(--text); max-height: 60vh; overflow-y: auto;">
+                <div style="text-align:center; padding: 20px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--blue); margin-bottom: 10px;"></i>
+                    <p>데이터를 분석하고 있습니다...</p>
+                </div>
+            </div>
+            <div class="modal-footer" style="margin-top: 20px;">
+                <button id="ai-modal-confirm-btn" class="modal-btn primary" style="width: 100%;">확인</button>
             </div>
         </div>
     </div>
