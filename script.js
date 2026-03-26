@@ -1440,12 +1440,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const isTmr = d.toDateString() === tmr.toDateString();
             const isDat = d.toDateString() === dat.toDateString();
             
+            let dateLabel = '';
             let label = d.toLocaleDateString('ko-KR',{month:'short',day:'numeric'});
             let cls = '';
-            if (isToday) { label = '오늘까지'; cls = 'overdue'; }
-            else if (isTmr) { label = '내일까지'; cls = 'overdue'; }
-            else if (isDat) { label = '모레까지'; cls = 'warning'; }
-            else if (overdue) { cls = 'overdue'; }
+            if (isToday) { dateLabel = '오늘'; cls = 'overdue'; }
+            else if (isTmr) { dateLabel = '내일'; cls = 'overdue'; }
+            else if (isDat) { dateLabel = '모레'; cls = 'warning'; }
+            else { dateLabel = label; if(overdue) cls = 'overdue'; }
+
+            const hasTime = (d.getHours() !== 0 || d.getMinutes() !== 0) && !(d.getHours() === 23 && d.getMinutes() === 59);
+            if (hasTime) {
+                label = `${dateLabel} ${d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}까지`;
+            } else {
+                label = `${dateLabel}까지`;
+            }
             meta += `<span class="meta-tag ${cls}"><i class="far fa-calendar"></i> ${label}</span>`;
         }
         
@@ -1610,7 +1618,8 @@ document.addEventListener('DOMContentLoaded', () => {
             { r: /이번주\s*([월화수목금토일])요일/, w: 0 },
             { r: /다음주\s*([월화수목금토일])요일/, w: 1 },
             { r: /다다음주\s*([월화수목금토일])요일/, w: 2 },
-            { r: /(\d{1,2})월\s*(\d{1,2})일/, f: 'md' }
+            { r: /(\d{1,2})월\s*(\d{1,2})일/, f: 'md' },
+            { r: /(?<=^|\s)(\d{1,2})[\.\/](\d{1,2})(?=\s|$)/, f: 'md' }
         ];
 
         for (let obj of regs) {
@@ -1637,12 +1646,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Apply time if found
-        if (t && timeStr) {
+        if (timeStr) {
+            let assumedToday = false;
+            if (!t) { t = new Date(today); assumedToday = true; }
             const tm = timeStr.match(/(\d{1,2})시(\s*(\d{1,2})분)?/);
             if (tm) {
                 const hh = parseInt(tm[1]);
                 const mm = tm[3] ? parseInt(tm[3]) : 0;
                 t.setHours(hh, mm, 0, 0);
+                if (assumedToday && t < new Date()) t.setDate(t.getDate() + 1);
             }
         }
 
